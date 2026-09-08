@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Free-TV Italia Player — index4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17"></script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white font-sans antialiased min-h-screen flex flex-col">
+
+    <header class="bg-gray-800 border-b border-gray-700 p-4 shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex flex-col">
+                <div class="flex items-center space-x-3">
+                    <span class="bg-red-600 text-white text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">Live</span>
+                    <h1 class="text-xl font-bold tracking-wide">Free-TV Italia Player</h1>
+                    <span class="text-[10px] uppercase tracking-wider text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5">index4</span>
+                </div>
+                <span class="text-[11px] text-gray-400 italic text-right mt-0.5">by Sergio Mattarella x Dammi70€</span>
+            </div>
+            <div class="w-full sm:w-72">
+                <input type="text" id="searchInput" placeholder="Cerca canale o LCN..."
+                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400">
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <div class="lg:col-span-2 flex flex-col space-y-4">
+            <div class="bg-black rounded-xl overflow-hidden shadow-2xl border border-gray-800 aspect-video relative flex items-center justify-center">
+                <div id="playerPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center text-gray-500 p-6 text-center">
+                    <svg class="w-16 h-16 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1.001 1.001 0 0010 9.87v4.263a1.001 1.001 0 001.555.832l3.197-2.132a1.001 1.001 0 000-1.664z"></path>
+                    </svg>
+                    <p class="text-sm">Seleziona un canale dalla lista o inserisci LCN da telecomando</p>
+                </div>
+                <video id="videoPlayer" class="w-full h-full object-contain" controls autoplay playsinline></video>
+            </div>
+
+            <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-wrap justify-between items-center gap-3">
+                <div class="flex-1 min-w-[200px] flex items-center gap-3">
+                    <span id="currentChannelLCN" class="hidden bg-blue-600 text-white font-bold text-sm px-2.5 py-1 rounded font-mono">--</span>
+                    <div>
+                        <h2 id="currentChannelName" class="text-lg font-semibold text-gray-200">Nessun canale in riproduzione</h2>
+                        <p id="currentChannelStatus" class="text-xs text-gray-400">Pronto</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <div class="flex items-center space-x-2">
+                        <label for="qualitySelect" class="text-xs text-gray-400 font-medium">Qualità:</label>
+                        <select id="qualitySelect" disabled class="bg-gray-700 border border-gray-600 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">
+                            <option value="-1">Auto (Default)</option>
+                        </select>
+                    </div>
+                    <div id="loadingSpinner" class="hidden">
+                        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-col gap-3">
+                <div class="flex justify-between items-center border-b border-gray-700 pb-2 gap-2">
+                    <h3 class="font-bold text-sm text-gray-300 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        Programmazione Guida TV (EPG)
+                    </h3>
+                    <span id="epgStatus" class="text-[11px] text-emerald-400/90 text-right">EPG · RaiPlay + Mediaset</span>
+                </div>
+                <div id="epgContainer" class="flex flex-col gap-2 min-h-[100px]">
+                    <p class="text-xs text-gray-500 text-center py-6">Seleziona un canale per caricare la guida TV.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-4">
+            <div class="bg-gray-800 rounded-xl border border-gray-700 flex flex-col h-64 lg:h-80 overflow-hidden shadow-xl">
+                <div class="p-3 border-b border-gray-700 bg-gray-800/50 flex justify-between items-center">
+                    <h3 class="font-bold text-sm text-gray-300">Canali DTT LCN</h3>
+                    <span id="channelCount" class="bg-gray-700 text-xs px-2 py-0.5 rounded-full text-gray-400">0 canali</span>
+                </div>
+                <div id="channelList" class="overflow-y-auto p-2 space-y-1.5 flex-1">
+                    <div class="text-center py-8 text-gray-400 text-sm">Sintonizzazione in corso...</div>
+                </div>
+            </div>
+
+            <div class="bg-gray-800 rounded-xl border border-gray-700 p-4 shadow-xl flex flex-col items-center">
+                <div class="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Telecomando DTT</div>
+                <div id="remoteDisplay" class="w-full bg-gray-900 border border-gray-700 rounded-lg py-1.5 px-3 text-center text-xl font-mono text-green-400 mb-3 h-10 flex items-center justify-center tracking-widest">---</div>
+                <div class="grid grid-cols-3 gap-2 w-full max-w-[220px]">
+                    <button onclick="pressNum('1')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">1</button>
+                    <button onclick="pressNum('2')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">2</button>
+                    <button onclick="pressNum('3')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">3</button>
+                    <button onclick="pressNum('4')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">4</button>
+                    <button onclick="pressNum('5')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">5</button>
+                    <button onclick="pressNum('6')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">6</button>
+                    <button onclick="pressNum('7')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">7</button>
+                    <button onclick="pressNum('8')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">8</button>
+                    <button onclick="pressNum('9')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">9</button>
+                    <button onclick="clearNum()" class="bg-red-800/80 hover:bg-red-700 text-xs font-bold py-2 rounded-lg transition">DEL</button>
+                    <button onclick="pressNum('0')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">0</button>
+                    <button onclick="tuneChannel()" class="bg-blue-600 hover:bg-blue-500 text-xs font-bold py-2 rounded-lg transition">OK</button>
+                </div>
+                <div class="grid grid-cols-2 gap-3 w-full max-w-[220px] mt-3 pt-3 border-t border-gray-700">
+                    <div class="flex flex-col gap-1.5">
+                        <span class="text-[10px] text-gray-400 text-center font-bold">ZAPPING</span>
+                        <button onclick="changeChannel(1)" class="bg-gray-700 hover:bg-gray-600 font-bold py-1.5 rounded-lg text-xs">▲ CH+</button>
+                        <button onclick="changeChannel(-1)" class="bg-gray-700 hover:bg-gray-600 font-bold py-1.5 rounded-lg text-xs">▼ CH-</button>
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                        <span class="text-[10px] text-gray-400 text-center font-bold">VOLUME</span>
+                        <button onclick="adjustVolume(0.1)" class="bg-gray-700 hover:bg-gray-600 font-bold py-1.5 rounded-lg text-xs">VOL +</button>
+                        <button onclick="adjustVolume(-0.1)" class="bg-gray-700 hover:bg-gray-600 font-bold py-1.5 rounded-lg text-xs">VOL -</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const PLAYLIST_URL = 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_italy.m3u8';
+
+        // File unico: EPG solo da API pubbliche con CORS (RaiPlay + Mediaset). Niente server.
+        const RAI_SLUG_BY_NAME = {
+            'rai 1': 'rai-1', 'rai 2': 'rai-2', 'rai 3': 'rai-3', 'rai 4': 'rai-4', 'rai 5': 'rai-5',
+            'rai movie': 'rai-movie', 'rai premium': 'rai-premium', 'rai gulp': 'rai-gulp',
+            'rai yoyo': 'rai-yoyo', 'rai storia': 'rai-storia', 'rai scuola': 'rai-scuola',
+            'rai news 24': 'rai-news-24', 'rai sport': 'rai-sport'
+        };
+
+        const RAI_TVG_TO_SLUG = {
+            Rai1: 'rai-1', Rai2: 'rai-2', Rai3: 'rai-3', Rai4: 'rai-4', Rai5: 'rai-5',
+            RaiMovie: 'rai-movie', RaiPremium: 'rai-premium', RaiGulp: 'rai-gulp',
+            RaiYoyo: 'rai-yoyo', RaiStoria: 'rai-storia', RaiNews24: 'rai-news-24', RaiSport: 'rai-sport'
+        };
+
+        const MEDIASET_CODE_BY_NAME = {
+            'canale 5': 'C5', 'italia 1': 'I1', 'rete 4': 'R4', 'la 5': 'KA', 'la5': 'KA',
+            'italia 2': 'I2', 'iris': 'KI', 'twentyseven': 'B6', '27 twentyseven': 'B6',
+            'tgcom24': 'KF', 'mediaset extra': 'KQ'
+        };
+
+        const OFFICIAL_LCN_MAP = {
+            "rai 1": 1, "rai 2": 2, "rai 3": 3, "rete 4": 4, "canale 5": 5, "italia 1": 6,
+            "la7": 7, "tv8": 8, "nove": 9, "20": 20, "20 mediaset": 20, "rai 4": 21,
+            "iris": 22, "rai 5": 23, "rai movie": 24, "rai premium": 25, "cielo": 26,
+            "twentyseven": 27, "27": 27, "tv2000": 28, "la7d": 29, "la5": 30, "real time": 31,
+            "qvc": 32, "food network": 33, "cine34": 34, "focus": 35, "rtl 102.5": 36,
+            "giallo": 38, "top crime": 39, "boing": 40, "rai gulp": 42, "rai yoyo": 43,
+            "cartoonito": 46, "super!": 47, "rai news 24": 48, "italia 2": 49, "sky tg24": 50,
+            "tgcom24": 51, "dmax": 52, "rai storia": 54, "mediaset extra": 55, "hgtv": 56,
+            "rai sport": 58, "sportitalia": 60, "supertennis": 64, "deejay tv": 69, "radioitalia tv": 70
+        };
+
+        let channels = [];
+        let currentIndex = -1;
+        let hls = null;
+        let inputBuffer = '';
+        let inputTimeout = null;
+        let epgRequestId = 0;
+
+        const videoPlayer = document.getElementById('videoPlayer');
+        const playerPlaceholder = document.getElementById('playerPlaceholder');
+        const channelListEl = document.getElementById('channelList');
+        const searchInput = document.getElementById('searchInput');
+        const currentChannelName = document.getElementById('currentChannelName');
+        const currentChannelLCN = document.getElementById('currentChannelLCN');
+        const currentChannelStatus = document.getElementById('currentChannelStatus');
+        const channelCountEl = document.getElementById('channelCount');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const remoteDisplay = document.getElementById('remoteDisplay');
+        const epgContainer = document.getElementById('epgContainer');
+        const epgStatus = document.getElementById('epgStatus');
+
+        function escapeHtml(str) {
+            return String(str ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function sanitizeChannelName(name) {
+            return name
+                .replace(/[\u2460-\u24FF\u24B6-\u24E9]/g, '')
+                .replace(/\[.*?\]|\(.*?\)/g, '')
+                .replace(/\b(hd|sd|fhd|uhd|4k)\b/gi, '')
+                .replace(/[^a-zA-Z0-9\s!]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+        }
+
+        function normalizeForMatch(name) {
+            return sanitizeChannelName(name)
+                .replace(/\b(tv|italia|it)\b/gi, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function formatTime(date) {
+            return date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function formatDateKeyRome(date = new Date()) {
+            const parts = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Europe/Rome',
+                day: '2-digit', month: '2-digit', year: 'numeric'
+            }).formatToParts(date);
+            const get = (t) => parts.find(p => p.type === t).value;
+            return `${get('day')}-${get('month')}-${get('year')}`;
+        }
+
+        function pickUpcomingPrograms(list, limit = 8) {
+            const now = Date.now();
+            const valid = (list || []).filter(p => p.stop.getTime() - p.start.getTime() >= 60 * 1000);
+            const upcoming = valid.filter(p => p.stop.getTime() > now - 5 * 60000);
+            return (upcoming.length ? upcoming : valid.slice(-limit)).slice(0, limit);
+        }
+
+        function displayEPGList(programs, metaLabel = '') {
+            if (!programs || !programs.length) {
+                displayEpgUnavailable('Nessun programma trovato per questo canale.');
+                return;
+            }
+            const now = new Date();
+            let html = '';
+            if (metaLabel) {
+                html += `<p class="text-[10px] text-gray-500 mb-1">${escapeHtml(metaLabel)}</p>`;
+            }
+            html += '<div class="space-y-2">';
+            programs.forEach((p) => {
+                const isNow = now >= p.start && now <= p.stop;
+                html += `
+                    <div class="p-2.5 rounded-lg ${isNow ? 'bg-blue-900/40 border border-blue-500' : 'bg-gray-900/40'} flex flex-col gap-1">
+                        <div class="flex justify-between items-center text-xs gap-2">
+                            <span class="${isNow ? 'text-blue-400 font-bold' : 'text-gray-400'} font-mono">${formatTime(p.start)} - ${formatTime(p.stop)}</span>
+                            ${isNow ? '<span class="text-[10px] bg-blue-600 px-1.5 py-0.5 rounded uppercase font-bold shrink-0">In Onda</span>' : ''}
+                        </div>
+                        <h4 class="text-xs font-semibold text-gray-200">${escapeHtml(p.title)}</h4>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            epgContainer.innerHTML = html;
+        }
+
+        function displayEpgUnavailable(message) {
+            epgContainer.innerHTML = `
+                <div class="text-center py-6 px-3 space-y-2">
+                    <p class="text-xs text-gray-400">${escapeHtml(message)}</p>
+                    <p class="text-[10px] text-gray-600 leading-relaxed">
+                        Questo file (index4) è autonomo: l’EPG arriva solo da
+                        <span class="text-gray-500">RaiPlay</span> (giornata) e
+                        <span class="text-gray-500">Mediaset</span> (ora + successivo).
+                        Altri canali non espongono un’API usabile dal browser.
+                    </p>
+                </div>
+            `;
+        }
+
+        function parseRaiDurationMinutes(ev) {
+            if (typeof ev.duration_in_minutes === 'number') return ev.duration_in_minutes;
+            const fromLabel = String(ev.duration_in_minutes || '').match(/(\d+)/);
+            if (fromLabel) return Number(fromLabel[1]);
+            const parts = String(ev.duration || '').split(':').map(Number);
+            if (parts.length === 3 && parts.every(n => !Number.isNaN(n))) {
+                return parts[0] * 60 + parts[1] + Math.round(parts[2] / 60);
+            }
+            return 30;
+        }
+
+        function parseRaiEventStart(ev, pageDateKey) {
+            const rawDate = ev.date || pageDateKey || '';
+            const norm = rawDate.replace(/\//g, '-');
+            const dm = norm.match(/(\d{2})-(\d{2})-(\d{4})/);
+            const hm = String(ev.hour || '00:00').match(/(\d{1,2}):(\d{2})/);
+            if (!dm || !hm) return null;
+            return new Date(Number(dm[3]), Number(dm[2]) - 1, Number(dm[1]), Number(hm[1]), Number(hm[2]), 0);
+        }
+
+        function resolveRaiSlug(channel) {
+            const key = normalizeForMatch(channel.name);
+            for (const [name, slug] of Object.entries(RAI_SLUG_BY_NAME)) {
+                if (key === name || key.startsWith(name + ' ')) return slug;
+            }
+            if (channel.tvgId && /^rai/i.test(channel.tvgId)) {
+                const id = channel.tvgId.replace(/\.it$/i, '');
+                return RAI_TVG_TO_SLUG[id] || null;
+            }
+            return null;
+        }
+
+        async function fetchRaiPlayEPG(channel) {
+            const slug = resolveRaiSlug(channel);
+            if (!slug) return null;
+
+            const dateKey = formatDateKeyRome();
+            const res = await fetch(`https://www.raiplay.it/palinsesto/app/${slug}/${dateKey}.json`);
+            if (!res.ok) throw new Error(`RaiPlay HTTP ${res.status}`);
+            const data = await res.json();
+            const programs = (data.events || []).map(ev => {
+                const startDate = parseRaiEventStart(ev, data.date || dateKey);
+                if (!startDate) return null;
+                const stopDate = new Date(startDate.getTime() + parseRaiDurationMinutes(ev) * 60000);
+                return { start: startDate, stop: stopDate, title: ev.name || ev.program?.name || 'Programma' };
+            }).filter(Boolean);
+
+            for (let i = 0; i < programs.length - 1; i++) {
+                if (programs[i + 1].start > programs[i].start && programs[i].stop > programs[i + 1].start) {
+                    programs[i].stop = programs[i + 1].start;
+                }
+            }
+            return programs.length
+                ? { programs: pickUpcomingPrograms(programs), label: `Fonte: RaiPlay · giornata (${slug})` }
+                : null;
+        }
+
+        function resolveMediasetCode(channel) {
+            const key = normalizeForMatch(channel.name);
+            for (const [name, code] of Object.entries(MEDIASET_CODE_BY_NAME)) {
+                if (key === name || key.startsWith(name + ' ') || key.includes(name)) return code;
+            }
+            return null;
+        }
+
+        async function fetchMediasetNowNext(channel) {
+            const code = resolveMediasetCode(channel);
+            if (!code) return null;
+
+            const res = await fetch(`https://static3.mediasetplay.mediaset.it/apigw/nownext/${code}.json`);
+            if (!res.ok) throw new Error(`Mediaset HTTP ${res.status}`);
+            const data = await res.json();
+            if (!data?.isOk || !data.response) return null;
+
+            const toProg = (listing) => {
+                if (!listing) return null;
+                const title = listing['mediasetlisting$epgTitle']
+                    || listing.program?.['mediasetprogram$brandTitle']
+                    || listing.program?.title
+                    || listing.description
+                    || 'Programma';
+                const start = listing.startTime ? new Date(listing.startTime) : null;
+                const stop = listing.endTime ? new Date(listing.endTime) : null;
+                if (!start || !stop) return null;
+                return { start, stop, title };
+            };
+
+            const programs = [toProg(data.response.currentListing), toProg(data.response.nextListing)].filter(Boolean);
+            return programs.length
+                ? { programs, label: `Fonte: Mediaset Now/Next (${code}) · solo attuale + successivo` }
+                : null;
+        }
+
+        async function renderEPG(channel) {
+            if (!channel) return;
+            const reqId = ++epgRequestId;
+            epgContainer.innerHTML = `<div class="text-xs text-gray-400 py-4 text-center">Ricerca palinsesto per ${escapeHtml(channel.name)}...</div>`;
+
+            try {
+                const rai = await fetchRaiPlayEPG(channel);
+                if (reqId !== epgRequestId) return;
+                if (rai) {
+                    displayEPGList(rai.programs, rai.label);
+                    epgStatus.textContent = 'EPG da RaiPlay';
+                    return;
+                }
+            } catch (err) {
+                console.warn('RaiPlay EPG', err);
+            }
+
+            try {
+                const ms = await fetchMediasetNowNext(channel);
+                if (reqId !== epgRequestId) return;
+                if (ms) {
+                    displayEPGList(ms.programs, ms.label);
+                    epgStatus.textContent = 'EPG da Mediaset';
+                    return;
+                }
+            } catch (err) {
+                console.warn('Mediaset EPG', err);
+            }
+
+            if (reqId !== epgRequestId) return;
+            epgStatus.textContent = 'EPG · RaiPlay + Mediaset';
+            displayEpgUnavailable(`Palinsesto non disponibile per “${channel.name}” (es. La7, TV8, Nove, …).`);
+        }
+
+        async function loadPlaylist() {
+            try {
+                const response = await fetch(PLAYLIST_URL);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                parseM3U(await response.text());
+                epgStatus.textContent = 'EPG · RaiPlay + Mediaset';
+            } catch (error) {
+                console.error('Errore playlist:', error);
+                channelListEl.innerHTML = `<div class="text-center py-10 text-red-400 text-sm px-3">Errore di caricamento playlist.<br><span class="text-[10px] text-gray-500">Su GitHub Pages funziona; da file:// alcuni browser bloccano le richieste.</span></div>`;
+            }
+        }
+
+        function assignLCN(channelName, fallbackCounter) {
+            const cleanName = sanitizeChannelName(channelName);
+            for (const nameKey in OFFICIAL_LCN_MAP) {
+                if (cleanName === nameKey || cleanName.startsWith(nameKey)) return OFFICIAL_LCN_MAP[nameKey];
+            }
+            return 900 + fallbackCounter;
+        }
+
+        function parseM3U(content) {
+            const lines = content.split('\n');
+            const rawChannels = [];
+            let currentChannel = {};
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line.startsWith('#EXTINF:')) {
+                    currentChannel = {};
+                    currentChannel.logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || '';
+                    currentChannel.tvgId = (line.match(/tvg-id="([^"]*)"/) || [])[1] || '';
+                    const chno = (line.match(/tvg-chno="([^"]*)"/) || [])[1];
+                    currentChannel.tvgChno = chno ? parseInt(chno, 10) : null;
+                    const nameParts = line.split(',');
+                    currentChannel.name = nameParts.length > 1 ? nameParts[nameParts.length - 1].trim() : 'Canale Sconosciuto';
+                } else if (line && !line.startsWith('#')) {
+                    currentChannel.url = line;
+                    if (currentChannel.name && currentChannel.url) rawChannels.push({ ...currentChannel });
+                }
+            }
+
+            let unassignedCount = 0;
+            channels = rawChannels.map((ch) => {
+                const fromChno = Number.isFinite(ch.tvgChno) ? ch.tvgChno : null;
+                const lcn = fromChno || assignLCN(ch.name, unassignedCount);
+                if (lcn >= 900) unassignedCount++;
+                return { ...ch, lcn, cleanName: sanitizeChannelName(ch.name) };
+            });
+
+            channels.sort((a, b) => a.lcn - b.lcn);
+            renderChannels(channels);
+            channelCountEl.textContent = `${channels.length} canali`;
+        }
+
+        function renderChannels(channelsToRender) {
+            channelListEl.innerHTML = '';
+            if (channelsToRender.length === 0) {
+                channelListEl.innerHTML = `<div class="text-center py-10 text-gray-500 text-sm">Nessun canale trovato</div>`;
+                return;
+            }
+
+            channelsToRender.forEach((channel) => {
+                const globalIdx = channels.findIndex(c => c.url === channel.url && c.lcn === channel.lcn);
+                const item = document.createElement('div');
+                item.className = `flex items-center space-x-3 p-2 rounded-lg bg-gray-700/40 hover:bg-gray-700 cursor-pointer transition border ${globalIdx === currentIndex ? 'border-blue-500 bg-gray-700' : 'border-transparent'}`;
+
+                const logoHtml = channel.logo
+                    ? `<img src="${escapeHtml(channel.logo)}" alt="" class="w-8 h-8 object-contain bg-gray-900 rounded p-1" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'w-8 h-8 bg-gray-900 rounded flex items-center justify-center text-[10px] font-bold text-gray-500',textContent:'TV'}))">`
+                    : `<div class="w-8 h-8 bg-gray-900 rounded flex items-center justify-center text-[10px] font-bold text-gray-500">TV</div>`;
+
+                item.innerHTML = `
+                    <span class="text-xs font-mono font-bold ${channel.lcn >= 900 ? 'text-gray-400' : 'text-blue-400'} w-7 text-right">${channel.lcn}</span>
+                    ${logoHtml}
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs font-medium text-gray-200 truncate">${escapeHtml(channel.name)}</p>
+                    </div>
+                `;
+                item.addEventListener('click', () => playChannel(globalIdx));
+                channelListEl.appendChild(item);
+            });
+        }
+
+        function playChannel(index) {
+            if (index < 0 || index >= channels.length) return;
+
+            currentIndex = index;
+            const channel = channels[currentIndex];
+
+            currentChannelLCN.textContent = `LCN ${channel.lcn}`;
+            currentChannelLCN.classList.remove('hidden');
+            currentChannelName.textContent = channel.name;
+            currentChannelStatus.textContent = 'Connessione in corso...';
+            loadingSpinner.classList.remove('hidden');
+            playerPlaceholder.style.display = 'none';
+
+            renderChannels(channels);
+            renderEPG(channel);
+
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+
+            if (Hls.isSupported()) {
+                hls = new Hls({ capLevelToPlayerSize: false, autoLevelCapping: -1 });
+                hls.loadSource(channel.url);
+                hls.attachMedia(videoPlayer);
+
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    videoPlayer.play().catch(() => {});
+                    currentChannelStatus.textContent = 'In riproduzione';
+                    loadingSpinner.classList.add('hidden');
+                });
+
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        currentChannelStatus.textContent = 'Errore di streaming o flusso offline';
+                        loadingSpinner.classList.add('hidden');
+                    }
+                });
+            } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                videoPlayer.src = channel.url;
+                videoPlayer.addEventListener('loadedmetadata', () => {
+                    videoPlayer.play().catch(() => {});
+                    currentChannelStatus.textContent = 'In riproduzione (Safari)';
+                    loadingSpinner.classList.add('hidden');
+                }, { once: true });
+            }
+        }
+
+        function pressNum(num) {
+            if (inputBuffer.length < 3) {
+                inputBuffer += num;
+                updateRemoteDisplay();
+            }
+            clearTimeout(inputTimeout);
+            inputTimeout = setTimeout(() => tuneChannel(), 1800);
+        }
+
+        function clearNum() {
+            inputBuffer = '';
+            clearTimeout(inputTimeout);
+            updateRemoteDisplay();
+        }
+
+        function updateRemoteDisplay() {
+            remoteDisplay.textContent = inputBuffer || '---';
+        }
+
+        function tuneChannel() {
+            clearTimeout(inputTimeout);
+            if (!inputBuffer) return;
+            const targetLcn = parseInt(inputBuffer, 10);
+            const foundIndex = channels.findIndex(c => c.lcn === targetLcn);
+            if (foundIndex !== -1) playChannel(foundIndex);
+            else {
+                remoteDisplay.textContent = 'N.A.';
+                setTimeout(() => updateRemoteDisplay(), 1000);
+            }
+            inputBuffer = '';
+            setTimeout(() => updateRemoteDisplay(), 1000);
+        }
+
+        function changeChannel(direction) {
+            if (channels.length === 0) return;
+            let nextIndex = currentIndex + direction;
+            if (nextIndex >= channels.length) nextIndex = 0;
+            if (nextIndex < 0) nextIndex = channels.length - 1;
+            playChannel(nextIndex);
+        }
+
+        function adjustVolume(delta) {
+            videoPlayer.volume = Math.min(1, Math.max(0, videoPlayer.volume + delta));
+        }
+
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase().trim();
+            const filtered = channels.filter(c =>
+                c.cleanName.includes(term) || c.name.toLowerCase().includes(term) || c.lcn.toString() === term
+            );
+            renderChannels(filtered);
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (document.activeElement === searchInput) return;
+            if (e.key >= '0' && e.key <= '9') pressNum(e.key);
+            if (e.key === 'Enter') tuneChannel();
+            if (e.key === 'Backspace') clearNum();
+            if (e.key === 'ArrowUp') changeChannel(-1);
+            if (e.key === 'ArrowDown') changeChannel(1);
+        });
+
+        loadPlaylist();
+    </script>
+</body>
+</html>
