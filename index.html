@@ -184,6 +184,29 @@
             box-shadow: 0 14px 30px rgba(0, 0, 0, .6);
         }
 
+        .quality-bar {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            margin-top: .9rem;
+            font-size: .7rem;
+            letter-spacing: .15em;
+            text-transform: uppercase;
+            color: #9ca3af;
+        }
+        .quality-bar select {
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: .5rem;
+            padding: .25rem .5rem;
+            font-size: .75rem;
+            letter-spacing: normal;
+            text-transform: none;
+            color: #fff;
+        }
+        .quality-bar select:focus { outline: 2px solid #3b82f6; outline-offset: 1px; }
+        .quality-bar select:disabled { opacity: .45; }
+
         /* ---------- Telecomando vintage ---------- */
         .remote {
             --speckle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .2 0 0 0 0 .17 0 0 0 0 .12 0 0 0 2.4 -1.25'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -358,6 +381,12 @@
                 <span class="tv-leg r"></span>
             </div>
             <div class="tv-stand" aria-hidden="true"></div>
+            <div class="quality-bar">
+                <label for="qualitySelect">Qualità</label>
+                <select id="qualitySelect" disabled>
+                    <option value="-1">Auto</option>
+                </select>
+            </div>
         </div>
 
         <div class="remote" id="remote" role="group" aria-label="Telecomando">
@@ -405,7 +434,7 @@
                     <span></span>
                     <button class="rbtn r" data-k="power" data-l="POWER" onclick="powerToggle()" aria-label="Accendi o spegni"></button>
                     <span></span>
-                    <span></span>
+                    <button class="rbtn d" data-k="quality" data-l="QUALITÀ" onclick="cycleQuality()" aria-label="Cambia qualità"></button>
                 </div>
             </div>
         </div>
@@ -503,6 +532,7 @@
         const currentChannelStatus = document.getElementById('currentChannelStatus');
         const channelCountEl = document.getElementById('channelCount');
         const loadingSpinner = document.getElementById('loadingSpinner');
+        const qualitySelect = document.getElementById('qualitySelect');
         const remoteDisplay = document.getElementById('remoteDisplay');
         const epgContainer = document.getElementById('epgContainer');
         const epgStatus = document.getElementById('epgStatus');
@@ -821,6 +851,57 @@
             if (!sticky) infoOsdTimer = setTimeout(() => osdInfo.classList.remove('show'), 4000);
         }
 
+        // ---------- Qualità (livelli HLS) ----------
+        function levelLabel(level, levels) {
+            if (!level.height) return `${Math.round(level.bitrate / 1000)} kbps`;
+            const sameHeight = levels.filter(l => l.height === level.height).length > 1;
+            return sameHeight ? `${level.height}p · ${Math.round(level.bitrate / 1000)} kbps` : `${level.height}p`;
+        }
+
+        function resetQuality() {
+            qualitySelect.innerHTML = '<option value="-1">Auto</option>';
+            qualitySelect.disabled = true;
+        }
+
+        function populateQuality() {
+            const levels = hls?.levels || [];
+            resetQuality();
+            if (levels.length < 2) return;
+            levels
+                .map((level, i) => ({ level, i }))
+                .sort((a, b) => (b.level.height - a.level.height) || (b.level.bitrate - a.level.bitrate))
+                .forEach(({ level, i }) => {
+                    qualitySelect.add(new Option(levelLabel(level, levels), String(i)));
+                });
+            qualitySelect.disabled = false;
+        }
+
+        function updateAutoLabel() {
+            if (!hls || !hls.autoLevelEnabled) return;
+            const level = hls.levels[hls.currentLevel];
+            qualitySelect.options[0].textContent = level ? `Auto (${levelLabel(level, hls.levels)})` : 'Auto';
+        }
+
+        function applyQuality() {
+            if (!hls) return;
+            const value = parseInt(qualitySelect.value, 10);
+            hls.currentLevel = value;
+            if (value === -1) updateAutoLabel();
+            else qualitySelect.options[0].textContent = 'Auto';
+            flashNum(qualitySelect.options[qualitySelect.selectedIndex].textContent.replace(/ \(.*\)$/, '').toUpperCase());
+        }
+
+        function cycleQuality() {
+            if (qualitySelect.disabled) {
+                flashNum('N.D.');
+                return;
+            }
+            qualitySelect.selectedIndex = (qualitySelect.selectedIndex + 1) % qualitySelect.options.length;
+            applyQuality();
+        }
+
+        qualitySelect.addEventListener('change', applyQuality);
+
         function playChannel(index) {
             if (index < 0 || index >= channels.length) return;
 
@@ -846,13 +927,17 @@
                 hls.destroy();
                 hls = null;
             }
+            resetQuality();
 
             if (Hls.isSupported()) {
                 hls = new Hls({ capLevelToPlayerSize: false, autoLevelCapping: -1 });
                 hls.loadSource(channel.url);
                 hls.attachMedia(videoPlayer);
 
+                hls.on(Hls.Events.LEVEL_SWITCHED, updateAutoLabel);
+
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    populateQuality();
                     videoPlayer.play().catch(() => {});
                     currentChannelStatus.textContent = 'In riproduzione';
                     loadingSpinner.classList.add('hidden');
@@ -881,6 +966,7 @@
                 hls.destroy();
                 hls = null;
             }
+            resetQuality();
             videoPlayer.pause();
             videoPlayer.removeAttribute('src');
             videoPlayer.load();
@@ -1014,6 +1100,7 @@
             else if (e.key === 'ArrowDown' && heroInView) { e.preventDefault(); changeChannel(-1); pressVisual('chdn'); }
             else if (e.key === 'm' || e.key === 'M') { toggleMute(); pressVisual('mute'); }
             else if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); pressVisual('full'); }
+            else if ((e.key === 'q' || e.key === 'Q') && document.activeElement !== qualitySelect) { cycleQuality(); pressVisual('quality'); }
         });
 
         loadPlaylist();
