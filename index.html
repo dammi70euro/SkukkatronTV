@@ -3,122 +3,445 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Free-TV Italia Player — index4</title>
+    <title>SkukkatronTV — Free-TV Italia</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17"></script>
     <style>
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #1f2937; }
         ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+
+        @property --ambi-l { syntax: '<color>'; inherits: true; initial-value: rgb(70, 110, 255); }
+        @property --ambi-r { syntax: '<color>'; inherits: true; initial-value: rgb(140, 80, 255); }
+
+        html { scroll-behavior: smooth; }
+        body { background: #0c0a09; }
+
+        /* ---------- Stanza ---------- */
+        .hero {
+            position: relative;
+            min-height: 100svh;
+            overflow: hidden;
+            background:
+                radial-gradient(ellipse 70% 50% at 50% 28%, rgba(255, 220, 170, .06), transparent 70%),
+                linear-gradient(#1c1815, #14110f 65%, #0e0c0a);
+        }
+        .wall-title { position: absolute; top: 1.1rem; left: 1.4rem; z-index: 20; }
+
+        /* ---------- TV ---------- */
+        .tv-wrap {
+            --tv-w: min(92vw, 1080px, 80svh);
+            position: relative;
+            width: var(--tv-w);
+            margin: max(7svh, 4.75rem) auto 0;
+        }
+        .ambi {
+            position: absolute;
+            inset: -14% -12%;
+            background:
+                radial-gradient(closest-side at 22% 50%, var(--ambi-l), transparent),
+                radial-gradient(closest-side at 78% 50%, var(--ambi-r), transparent);
+            filter: blur(55px);
+            opacity: 0;
+            transition: opacity 1.2s, --ambi-l 1s, --ambi-r 1s;
+            pointer-events: none;
+        }
+        .hero.on .ambi { opacity: .7; }
+
+        .tv {
+            position: relative;
+            z-index: 1;
+            background: linear-gradient(#141414, #070707);
+            border-radius: 10px;
+            padding: 1.1% 1.1% 2.6%;
+            box-shadow: 0 0 0 1px #2b2b2b, inset 0 1px 0 #3a3a3a, 0 30px 70px rgba(0, 0, 0, .65);
+        }
+        .tv-screen {
+            position: relative;
+            aspect-ratio: 16 / 9;
+            background: #000;
+            border-radius: 3px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        .tv-screen::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(118deg, rgba(255, 255, 255, .07) 0%, rgba(255, 255, 255, .02) 32%, transparent 33%);
+            pointer-events: none;
+            z-index: 6;
+        }
+        .tv-screen.switching { animation: tv-switch .45s ease-out; }
+        @keyframes tv-switch {
+            0% { filter: brightness(2.2) contrast(1.4); transform: scaleY(.02); }
+            35% { filter: brightness(1.6); transform: scaleY(1); }
+            100% { filter: none; transform: none; }
+        }
+        .tv-brand {
+            position: absolute;
+            bottom: .55%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: clamp(7px, .85vw, 11px);
+            font-weight: 700;
+            letter-spacing: .35em;
+            color: #5a5a5a;
+        }
+        .tv-led {
+            position: absolute;
+            right: 3%;
+            bottom: .9%;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #b91c1c;
+            box-shadow: 0 0 6px #ef4444;
+        }
+        .hero.on .tv-led { background: #16a34a; box-shadow: 0 0 6px #22c55e; }
+        .tv-leg {
+            position: absolute;
+            top: 100%;
+            width: 1.6%;
+            height: clamp(14px, 2.6svh, 28px);
+            background: linear-gradient(#2c2c2c, #0f0f0f);
+            transform-origin: top;
+            border-radius: 0 0 2px 2px;
+        }
+        .tv-leg.l { left: 9%; transform: skewX(-28deg); }
+        .tv-leg.r { right: 9%; transform: skewX(28deg); }
+
+        /* Contenuti dello schermo */
+        #videoPlayer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+        .screen-off {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: .6rem;
+            text-align: center;
+            padding: 1.5rem;
+            background: radial-gradient(ellipse at center, #0d1220, #000 70%);
+            color: #6b7280;
+        }
+        .static {
+            position: absolute;
+            inset: 0;
+            z-index: 3;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='s'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='1' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23s)'/%3E%3C/svg%3E");
+            animation: static-noise .35s steps(5) infinite;
+            opacity: .55;
+        }
+        @keyframes static-noise {
+            0% { background-position: 0 0; }
+            100% { background-position: 173px -97px; }
+        }
+        .osd-num {
+            position: absolute;
+            top: 5%;
+            right: 4%;
+            z-index: 5;
+            font: 700 clamp(18px, 3.4vw, 44px)/1 ui-monospace, 'Courier New', monospace;
+            color: #4ade80;
+            text-shadow: 0 0 8px rgba(74, 222, 128, .7), 2px 2px 0 #000;
+            letter-spacing: .12em;
+            opacity: 0;
+            transition: opacity .15s;
+            pointer-events: none;
+        }
+        .osd-info {
+            position: absolute;
+            left: 3%;
+            right: 3%;
+            bottom: 5%;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            padding: .6rem .9rem;
+            border-radius: .6rem;
+            background: linear-gradient(90deg, rgba(10, 15, 30, .88), rgba(10, 15, 30, .55));
+            border: 1px solid rgba(255, 255, 255, .08);
+            backdrop-filter: blur(6px);
+            opacity: 0;
+            transform: translateY(12px);
+            transition: opacity .3s, transform .3s;
+            pointer-events: none;
+        }
+        .osd-num.show, .osd-info.show { opacity: 1; transform: none; }
+
+        .tv-stand {
+            position: relative;
+            width: 118%;
+            left: -9%;
+            height: clamp(10px, 1.8svh, 18px);
+            margin-top: clamp(14px, 2.6svh, 28px);
+            border-radius: 3px;
+            background: linear-gradient(#5b4330, #3a2a1d 60%, #24190f);
+            box-shadow: 0 14px 30px rgba(0, 0, 0, .6);
+        }
+
+        /* ---------- Telecomando vintage ---------- */
+        .remote {
+            --speckle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .2 0 0 0 0 .17 0 0 0 0 .12 0 0 0 2.4 -1.25'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            position: absolute;
+            right: max(4vw, calc(50% - 620px));
+            bottom: 4svh;
+            z-index: 10;
+            font-size: clamp(8px, 1.42svh, 13px);
+            width: 17.5em;
+            padding: 1.6em 1.2em 7em;
+            border-radius: 4.5em 4.5em 2.6em 2.6em / 3.2em 3.2em 2.2em 2.2em;
+            background: var(--speckle), linear-gradient(160deg, #cbc3ad, #aaa28c 55%, #8e8773);
+            box-shadow:
+                inset 0 .3em .4em rgba(255, 255, 255, .35),
+                inset 0 -.8em 1.2em rgba(0, 0, 0, .35),
+                0 2.2em 3.4em rgba(0, 0, 0, .65);
+            transform: rotate(-6deg);
+            transition: transform .45s cubic-bezier(.3, 1.4, .5, 1);
+        }
+        .remote:hover { transform: rotate(-2deg) translateY(-.5em); }
+        .remote-ir {
+            width: 5em;
+            height: .55em;
+            margin: -.6em auto .9em;
+            border-radius: .4em;
+            background: linear-gradient(#2a1414, #120808);
+            box-shadow: inset 0 .1em .15em rgba(255, 255, 255, .15);
+        }
+        .remote.ir .remote-ir { background: linear-gradient(#7f1d1d, #3b0a0a); box-shadow: 0 0 .6em rgba(239, 68, 68, .7); }
+        .remote-plate {
+            position: relative;
+            padding: 3em 1em 1.6em;
+            border-radius: 2.8em 2.8em 1.1em 1.1em;
+            background: var(--speckle), linear-gradient(170deg, #d6cfba, #b3ab95);
+            box-shadow: 0 .25em .35em rgba(0, 0, 0, .35), inset 0 .15em .2em rgba(255, 255, 255, .45);
+        }
+        .remote-logo {
+            position: absolute;
+            top: .9em;
+            left: 50%;
+            transform: translateX(-50%);
+            font: 800 .78em/1 Georgia, serif;
+            letter-spacing: .38em;
+            color: rgba(62, 53, 40, .75);
+            text-shadow: 0 1px 0 rgba(255, 255, 255, .4);
+            white-space: nowrap;
+        }
+        .rgrid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            row-gap: 1.25em;
+            column-gap: .4em;
+            justify-items: center;
+        }
+        .rgrid + .rgrid { margin-top: 1.5em; }
+        .rbtn {
+            --c: #3d6b45;
+            position: relative;
+            width: 2.4em;
+            height: 1.1em;
+            border: 0;
+            padding: 0;
+            border-radius: .55em;
+            cursor: pointer;
+            background: var(--c);
+            box-shadow:
+                inset 0 .15em .1em rgba(255, 255, 255, .35),
+                inset 0 -.15em .15em rgba(0, 0, 0, .35),
+                0 .2em 0 rgba(0, 0, 0, .5),
+                0 .32em .4em rgba(0, 0, 0, .25);
+            transition: transform .06s, box-shadow .06s;
+        }
+        .rbtn::after {
+            content: attr(data-l);
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: .45em;
+            font: 700 .62em/1 system-ui, sans-serif;
+            letter-spacing: .04em;
+            color: rgba(48, 40, 28, .8);
+            white-space: nowrap;
+            pointer-events: none;
+        }
+        .rbtn:active, .rbtn.pressed {
+            transform: translateY(.16em);
+            box-shadow: inset 0 .15em .1em rgba(255, 255, 255, .2), inset 0 -.1em .1em rgba(0, 0, 0, .3), 0 .04em 0 rgba(0, 0, 0, .5);
+        }
+        .rbtn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+        .rbtn.g { --c: #3d6b45; }
+        .rbtn.d { --c: #3a2e28; }
+        .rbtn.y { --c: #e0bf3a; }
+        .rbtn.r { --c: #c4372d; }
+        .rbtn.b { --c: #3c6c9c; }
+
+        .scroll-hint {
+            position: absolute;
+            left: 50%;
+            bottom: 1.1rem;
+            transform: translateX(-50%);
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .15rem;
+            font-size: .7rem;
+            letter-spacing: .25em;
+            text-transform: uppercase;
+            color: #9ca3af;
+            animation: bob 2s ease-in-out infinite;
+        }
+        .scroll-hint:hover { color: #fff; }
+        @keyframes bob { 50% { transform: translate(-50%, 6px); } }
+
+        @media (max-width: 700px) {
+            .hero { min-height: auto; padding-bottom: 4.5rem; }
+            .tv-wrap { --tv-w: 94vw; margin-top: 5.25rem; }
+            .remote {
+                position: relative;
+                right: auto;
+                bottom: auto;
+                margin: 3rem auto 0;
+                font-size: 12px;
+                transform: rotate(-3deg);
+            }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .scroll-hint, .static, .tv-screen.switching { animation: none; }
+        }
     </style>
 </head>
-<body class="bg-gray-900 text-white font-sans antialiased min-h-screen flex flex-col">
+<body class="text-white font-sans antialiased min-h-screen">
 
-    <header class="bg-gray-800 border-b border-gray-700 p-4 shadow-md sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div class="flex flex-col">
-                <div class="flex items-center space-x-3">
-                    <span class="bg-red-600 text-white text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">Live</span>
-                    <h1 class="text-xl font-bold tracking-wide">Free-TV Italia Player</h1>
-                    <span class="text-[10px] uppercase tracking-wider text-emerald-400 border border-emerald-700/60 rounded px-1.5 py-0.5">index4</span>
-                </div>
-                <span class="text-[11px] text-gray-400 italic text-right mt-0.5">by Sergio Mattarella x Dammi70€</span>
+    <!-- ===== Soggiorno: TV + telecomando ===== -->
+    <section class="hero" id="hero">
+        <div class="wall-title">
+            <div class="flex items-center gap-2.5">
+                <span class="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Live</span>
+                <h1 class="text-lg sm:text-xl font-bold tracking-wide">SkukkatronTV</h1>
             </div>
-            <div class="w-full sm:w-72">
-                <input type="text" id="searchInput" placeholder="Cerca canale o LCN..."
-                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400">
-            </div>
-        </div>
-    </header>
-
-    <main class="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        <div class="lg:col-span-2 flex flex-col space-y-4">
-            <div class="bg-black rounded-xl overflow-hidden shadow-2xl border border-gray-800 aspect-video relative flex items-center justify-center">
-                <div id="playerPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center text-gray-500 p-6 text-center">
-                    <svg class="w-16 h-16 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1.001 1.001 0 0010 9.87v4.263a1.001 1.001 0 001.555.832l3.197-2.132a1.001 1.001 0 000-1.664z"></path>
-                    </svg>
-                    <p class="text-sm">Seleziona un canale dalla lista o inserisci LCN da telecomando</p>
-                </div>
-                <video id="videoPlayer" class="w-full h-full object-contain" controls autoplay playsinline></video>
-            </div>
-
-            <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-wrap justify-between items-center gap-3">
-                <div class="flex-1 min-w-[200px] flex items-center gap-3">
-                    <span id="currentChannelLCN" class="hidden bg-blue-600 text-white font-bold text-sm px-2.5 py-1 rounded font-mono">--</span>
-                    <div>
-                        <h2 id="currentChannelName" class="text-lg font-semibold text-gray-200">Nessun canale in riproduzione</h2>
-                        <p id="currentChannelStatus" class="text-xs text-gray-400">Pronto</p>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-3">
-                    <div class="flex items-center space-x-2">
-                        <label for="qualitySelect" class="text-xs text-gray-400 font-medium">Qualità:</label>
-                        <select id="qualitySelect" disabled class="bg-gray-700 border border-gray-600 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">
-                            <option value="-1">Auto (Default)</option>
-                        </select>
-                    </div>
-                    <div id="loadingSpinner" class="hidden">
-                        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-col gap-3">
-                <div class="flex justify-between items-center border-b border-gray-700 pb-2 gap-2">
-                    <h3 class="font-bold text-sm text-gray-300 flex items-center gap-2">
-                        <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                        Programmazione Guida TV (EPG)
-                    </h3>
-                    <span id="epgStatus" class="text-[11px] text-emerald-400/90 text-right">EPG · RaiPlay + Mediaset</span>
-                </div>
-                <div id="epgContainer" class="flex flex-col gap-2 min-h-[100px]">
-                    <p class="text-xs text-gray-500 text-center py-6">Seleziona un canale per caricare la guida TV.</p>
-                </div>
-            </div>
+            <span class="text-[11px] text-gray-500 italic">by Sergio Mattarella x Dammi70€</span>
         </div>
 
-        <div class="flex flex-col gap-4">
-            <div class="bg-gray-800 rounded-xl border border-gray-700 flex flex-col h-64 lg:h-80 overflow-hidden shadow-xl">
-                <div class="p-3 border-b border-gray-700 bg-gray-800/50 flex justify-between items-center">
+        <div class="tv-wrap">
+            <div class="ambi" aria-hidden="true"></div>
+            <div class="tv">
+                <div class="tv-screen" id="tvScreen" title="Doppio clic: schermo intero">
+                    <video id="videoPlayer" autoplay playsinline></video>
+
+                    <div id="playerPlaceholder" class="screen-off">
+                        <div class="text-2xl sm:text-4xl font-black tracking-[.3em] text-gray-700">SKUKKATRON</div>
+                        <p class="text-xs sm:text-sm">Premi un numero o il tasto rosso sul telecomando</p>
+                        <p class="hidden sm:block text-[11px] text-gray-600">Tastiera: 0–9 · Invio · ↑ ↓ · M muto · F schermo intero</p>
+                    </div>
+
+                    <div id="loadingSpinner" class="static hidden" aria-hidden="true"></div>
+
+                    <div id="remoteDisplay" class="osd-num" aria-live="polite"></div>
+
+                    <div id="osdInfo" class="osd-info">
+                        <span id="currentChannelLCN" class="hidden bg-blue-600 text-white font-bold text-xs sm:text-sm px-2 py-1 rounded font-mono shrink-0">--</span>
+                        <div class="min-w-0">
+                            <h2 id="currentChannelName" class="text-sm sm:text-lg font-semibold text-gray-100 truncate">Nessun canale in riproduzione</h2>
+                            <p id="currentChannelStatus" class="text-[11px] sm:text-xs text-gray-400">Pronto</p>
+                        </div>
+                    </div>
+                </div>
+                <span class="tv-brand">SKUKKATRON</span>
+                <span class="tv-led"></span>
+                <span class="tv-leg l"></span>
+                <span class="tv-leg r"></span>
+            </div>
+            <div class="tv-stand" aria-hidden="true"></div>
+        </div>
+
+        <div class="remote" id="remote" role="group" aria-label="Telecomando">
+            <div class="remote-ir"></div>
+            <div class="remote-plate">
+                <span class="remote-logo">SKUKKATRON</span>
+                <div class="rgrid">
+                    <button class="rbtn g" data-k="1" data-l="1" onclick="pressNum('1')" aria-label="1"></button>
+                    <button class="rbtn g" data-k="2" data-l="2" onclick="pressNum('2')" aria-label="2"></button>
+                    <button class="rbtn g" data-k="3" data-l="3" onclick="pressNum('3')" aria-label="3"></button>
+                    <button class="rbtn g" data-k="4" data-l="4" onclick="pressNum('4')" aria-label="4"></button>
+                    <button class="rbtn g" data-k="5" data-l="5" onclick="pressNum('5')" aria-label="5"></button>
+                    <button class="rbtn g" data-k="6" data-l="6" onclick="pressNum('6')" aria-label="6"></button>
+                    <button class="rbtn g" data-k="7" data-l="7" onclick="pressNum('7')" aria-label="7"></button>
+                    <button class="rbtn g" data-k="8" data-l="8" onclick="pressNum('8')" aria-label="8"></button>
+                    <button class="rbtn g" data-k="9" data-l="9" onclick="pressNum('9')" aria-label="9"></button>
+                    <button class="rbtn g" data-k="0" data-l="0" onclick="pressNum('0')" aria-label="0"></button>
+                </div>
+                <div class="rgrid">
+                    <span></span>
+                    <button class="rbtn d" data-k="chup" data-l="CH ▲" onclick="changeChannel(1)" aria-label="Canale successivo"></button>
+                    <span></span>
+                    <button class="rbtn d" data-k="volup" data-l="VOL +" onclick="adjustVolume(0.1)" aria-label="Volume più"></button>
+                    <span></span>
+
+                    <span></span>
+                    <button class="rbtn d" data-k="chdn" data-l="CH ▼" onclick="changeChannel(-1)" aria-label="Canale precedente"></button>
+                    <span></span>
+                    <button class="rbtn d" data-k="voldn" data-l="VOL −" onclick="adjustVolume(-0.1)" aria-label="Volume meno"></button>
+                    <span></span>
+
+                    <button class="rbtn y" data-k="mute" data-l="MUTO" onclick="toggleMute()" aria-label="Muto"></button>
+                    <button class="rbtn y" data-k="full" data-l="FULL" onclick="toggleFullscreen()" aria-label="Schermo intero"></button>
+                    <span></span>
+                    <button class="rbtn y" data-k="list" data-l="LISTA" onclick="goToChannels()" aria-label="Lista canali"></button>
+                    <button class="rbtn y" data-k="epg" data-l="GUIDA" onclick="goToGuide()" aria-label="Guida TV"></button>
+
+                    <span></span>
+                    <button class="rbtn d" data-k="del" data-l="DEL" onclick="clearNum()" aria-label="Cancella"></button>
+                    <span></span>
+                    <button class="rbtn g" data-k="ok" data-l="OK" onclick="tuneChannel()" aria-label="OK"></button>
+                    <span></span>
+
+                    <button class="rbtn b" data-k="info" data-l="INFO" onclick="showInfo()" aria-label="Info canale"></button>
+                    <span></span>
+                    <button class="rbtn r" data-k="power" data-l="POWER" onclick="powerToggle()" aria-label="Accendi o spegni"></button>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </div>
+
+        <a href="#guida" class="scroll-hint">
+            Guida TV
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+        </a>
+    </section>
+
+    <!-- ===== Sotto: guida TV + canali ===== -->
+    <main id="guida" class="max-w-7xl w-full mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-3 gap-6 scroll-mt-4">
+        <div class="lg:col-span-2 bg-gray-800/80 p-4 rounded-xl border border-gray-700 flex flex-col gap-3">
+            <div class="flex justify-between items-center border-b border-gray-700 pb-2 gap-2">
+                <h3 class="font-bold text-sm text-gray-300 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    Programmazione Guida TV (EPG)
+                </h3>
+                <span id="epgStatus" class="text-[11px] text-emerald-400/90 text-right">EPG · RaiPlay + Mediaset</span>
+            </div>
+            <div id="epgContainer" class="flex flex-col gap-2 min-h-[100px]">
+                <p class="text-xs text-gray-500 text-center py-6">Seleziona un canale per caricare la guida TV.</p>
+            </div>
+        </div>
+
+        <div id="canali" class="bg-gray-800/80 rounded-xl border border-gray-700 flex flex-col h-[28rem] lg:h-[36rem] overflow-hidden shadow-xl scroll-mt-4">
+            <div class="p-3 border-b border-gray-700 flex flex-col gap-2">
+                <div class="flex justify-between items-center">
                     <h3 class="font-bold text-sm text-gray-300">Canali DTT LCN</h3>
                     <span id="channelCount" class="bg-gray-700 text-xs px-2 py-0.5 rounded-full text-gray-400">0 canali</span>
                 </div>
-                <div id="channelList" class="overflow-y-auto p-2 space-y-1.5 flex-1">
-                    <div class="text-center py-8 text-gray-400 text-sm">Sintonizzazione in corso...</div>
-                </div>
+                <input type="text" id="searchInput" placeholder="Cerca canale o LCN..."
+                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400">
             </div>
-
-            <div class="bg-gray-800 rounded-xl border border-gray-700 p-4 shadow-xl flex flex-col items-center">
-                <div class="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Telecomando DTT</div>
-                <div id="remoteDisplay" class="w-full bg-gray-900 border border-gray-700 rounded-lg py-1.5 px-3 text-center text-xl font-mono text-green-400 mb-3 h-10 flex items-center justify-center tracking-widest">---</div>
-                <div class="grid grid-cols-3 gap-2 w-full max-w-[220px]">
-                    <button onclick="pressNum('1')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">1</button>
-                    <button onclick="pressNum('2')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">2</button>
-                    <button onclick="pressNum('3')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">3</button>
-                    <button onclick="pressNum('4')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">4</button>
-                    <button onclick="pressNum('5')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">5</button>
-                    <button onclick="pressNum('6')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">6</button>
-                    <button onclick="pressNum('7')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">7</button>
-                    <button onclick="pressNum('8')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">8</button>
-                    <button onclick="pressNum('9')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">9</button>
-                    <button onclick="clearNum()" class="bg-red-800/80 hover:bg-red-700 text-xs font-bold py-2 rounded-lg transition">DEL</button>
-                    <button onclick="pressNum('0')" class="bg-gray-700 hover:bg-gray-600 active:bg-blue-600 font-bold py-2 rounded-lg text-sm transition">0</button>
-                    <button onclick="tuneChannel()" class="bg-blue-600 hover:bg-blue-500 text-xs font-bold py-2 rounded-lg transition">OK</button>
-                </div>
-                <div class="grid grid-cols-2 gap-3 w-full max-w-[220px] mt-3 pt-3 border-t border-gray-700">
-                    <div class="flex flex-col gap-1.5">
-                        <span class="text-[10px] text-gray-400 text-center font-bold">ZAPPING</span>
-                        <button onclick="changeChannel(1)" class="bg-gray-700 hover:bg-gray-600 font-bold py-1.5 rounded-lg text-xs">▲ CH+</button>
-                        <button onclick="changeChannel(-1)" class="bg-gray-700 hover:bg-gray-600 font-bold py-1.5 rounded-lg text-xs">▼ CH-</button>
-                    </div>
-                    <div class="flex flex-col gap-1.5">
-                        <span class="text-[10px] text-gray-400 text-center font-bold">VOLUME</span>
-                        <button onclick="adjustVolume(0.1)" class="bg-gray-700 hover:bg-gray-600 font-bold py-1.5 rounded-lg text-xs">VOL +</button>
-                        <button onclick="adjustVolume(-0.1)" class="bg-gray-700 hover:bg-gray-600 font-bold py-1.5 rounded-lg text-xs">VOL -</button>
-                    </div>
-                </div>
+            <div id="channelList" class="overflow-y-auto p-2 space-y-1.5 flex-1">
+                <div class="text-center py-8 text-gray-400 text-sm">Sintonizzazione in corso...</div>
             </div>
         </div>
     </main>
@@ -164,7 +487,13 @@
         let inputBuffer = '';
         let inputTimeout = null;
         let epgRequestId = 0;
+        let numOsdTimer = null;
+        let infoOsdTimer = null;
 
+        const hero = document.getElementById('hero');
+        const tvScreen = document.getElementById('tvScreen');
+        const remoteEl = document.getElementById('remote');
+        const osdInfo = document.getElementById('osdInfo');
         const videoPlayer = document.getElementById('videoPlayer');
         const playerPlaceholder = document.getElementById('playerPlaceholder');
         const channelListEl = document.getElementById('channelList');
@@ -188,7 +517,7 @@
 
         function sanitizeChannelName(name) {
             return name
-                .replace(/[\u2460-\u24FF\u24B6-\u24E9]/g, '')
+                .replace(/[①-⓿Ⓐ-ⓩ]/g, '')
                 .replace(/\[.*?\]|\(.*?\)/g, '')
                 .replace(/\b(hd|sd|fhd|uhd|4k)\b/gi, '')
                 .replace(/[^a-zA-Z0-9\s!]/g, ' ')
@@ -256,7 +585,7 @@
                 <div class="text-center py-6 px-3 space-y-2">
                     <p class="text-xs text-gray-400">${escapeHtml(message)}</p>
                     <p class="text-[10px] text-gray-600 leading-relaxed">
-                        Questo file (index4) è autonomo: l’EPG arriva solo da
+                        SkukkatronTV è autonomo: l’EPG arriva solo da
                         <span class="text-gray-500">RaiPlay</span> (giornata) e
                         <span class="text-gray-500">Mediaset</span> (ora + successivo).
                         Altri canali non espongono un’API usabile dal browser.
@@ -469,9 +798,27 @@
                         <p class="text-xs font-medium text-gray-200 truncate">${escapeHtml(channel.name)}</p>
                     </div>
                 `;
-                item.addEventListener('click', () => playChannel(globalIdx));
+                item.addEventListener('click', () => {
+                    playChannel(globalIdx);
+                    hero.scrollIntoView({ behavior: 'smooth' });
+                });
                 channelListEl.appendChild(item);
             });
+        }
+
+        // ---------- OSD sullo schermo ----------
+        function flashNum(text, ms = 1400) {
+            clearTimeout(numOsdTimer);
+            remoteDisplay.textContent = text;
+            remoteDisplay.classList.add('show');
+            if (ms) numOsdTimer = setTimeout(() => remoteDisplay.classList.remove('show'), ms);
+        }
+
+        function showInfo(sticky = false) {
+            if (currentIndex < 0) return;
+            clearTimeout(infoOsdTimer);
+            osdInfo.classList.add('show');
+            if (!sticky) infoOsdTimer = setTimeout(() => osdInfo.classList.remove('show'), 4000);
         }
 
         function playChannel(index) {
@@ -486,6 +833,11 @@
             currentChannelStatus.textContent = 'Connessione in corso...';
             loadingSpinner.classList.remove('hidden');
             playerPlaceholder.style.display = 'none';
+            hero.classList.add('on');
+            tvScreen.classList.remove('switching');
+            void tvScreen.offsetWidth;
+            tvScreen.classList.add('switching');
+            showInfo();
 
             renderChannels(channels);
             renderEPG(channel);
@@ -504,12 +856,13 @@
                     videoPlayer.play().catch(() => {});
                     currentChannelStatus.textContent = 'In riproduzione';
                     loadingSpinner.classList.add('hidden');
+                    showInfo();
                 });
 
                 hls.on(Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
                         currentChannelStatus.textContent = 'Errore di streaming o flusso offline';
-                        loadingSpinner.classList.add('hidden');
+                        showInfo(true);
                     }
                 });
             } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
@@ -518,15 +871,35 @@
                     videoPlayer.play().catch(() => {});
                     currentChannelStatus.textContent = 'In riproduzione (Safari)';
                     loadingSpinner.classList.add('hidden');
+                    showInfo();
                 }, { once: true });
             }
         }
 
-        function pressNum(num) {
-            if (inputBuffer.length < 3) {
-                inputBuffer += num;
-                updateRemoteDisplay();
+        function powerOff() {
+            if (hls) {
+                hls.destroy();
+                hls = null;
             }
+            videoPlayer.pause();
+            videoPlayer.removeAttribute('src');
+            videoPlayer.load();
+            hero.classList.remove('on');
+            loadingSpinner.classList.add('hidden');
+            playerPlaceholder.style.display = '';
+            osdInfo.classList.remove('show');
+            currentChannelStatus.textContent = 'Spento';
+        }
+
+        function powerToggle() {
+            if (hero.classList.contains('on')) powerOff();
+            else playChannel(currentIndex >= 0 ? currentIndex : 0);
+        }
+
+        // ---------- Telecomando ----------
+        function pressNum(num) {
+            if (inputBuffer.length < 3) inputBuffer += num;
+            flashNum(inputBuffer.padEnd(3, '-'), 0);
             clearTimeout(inputTimeout);
             inputTimeout = setTimeout(() => tuneChannel(), 1800);
         }
@@ -534,25 +907,22 @@
         function clearNum() {
             inputBuffer = '';
             clearTimeout(inputTimeout);
-            updateRemoteDisplay();
-        }
-
-        function updateRemoteDisplay() {
-            remoteDisplay.textContent = inputBuffer || '---';
+            clearTimeout(numOsdTimer);
+            remoteDisplay.classList.remove('show');
         }
 
         function tuneChannel() {
             clearTimeout(inputTimeout);
             if (!inputBuffer) return;
             const targetLcn = parseInt(inputBuffer, 10);
-            const foundIndex = channels.findIndex(c => c.lcn === targetLcn);
-            if (foundIndex !== -1) playChannel(foundIndex);
-            else {
-                remoteDisplay.textContent = 'N.A.';
-                setTimeout(() => updateRemoteDisplay(), 1000);
-            }
             inputBuffer = '';
-            setTimeout(() => updateRemoteDisplay(), 1000);
+            const foundIndex = channels.findIndex(c => c.lcn === targetLcn);
+            if (foundIndex !== -1) {
+                flashNum(String(targetLcn));
+                playChannel(foundIndex);
+            } else {
+                flashNum('N.A.');
+            }
         }
 
         function changeChannel(direction) {
@@ -561,11 +931,71 @@
             if (nextIndex >= channels.length) nextIndex = 0;
             if (nextIndex < 0) nextIndex = channels.length - 1;
             playChannel(nextIndex);
+            flashNum(String(channels[nextIndex].lcn));
         }
 
         function adjustVolume(delta) {
+            videoPlayer.muted = false;
             videoPlayer.volume = Math.min(1, Math.max(0, videoPlayer.volume + delta));
+            const bars = Math.round(videoPlayer.volume * 10);
+            flashNum('▮'.repeat(bars) + '▯'.repeat(10 - bars));
         }
+
+        function toggleMute() {
+            videoPlayer.muted = !videoPlayer.muted;
+            flashNum(videoPlayer.muted ? 'MUTO' : 'AUDIO');
+        }
+
+        function toggleFullscreen() {
+            if (document.fullscreenElement) document.exitFullscreen();
+            else if (videoPlayer.requestFullscreen) videoPlayer.requestFullscreen();
+            else if (videoPlayer.webkitEnterFullscreen) videoPlayer.webkitEnterFullscreen();
+        }
+
+        function goToGuide() {
+            document.getElementById('guida').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function goToChannels() {
+            document.getElementById('canali').scrollIntoView({ behavior: 'smooth' });
+            searchInput.focus({ preventScroll: true });
+        }
+
+        // Il telecomando "lampeggia" l'IR a ogni tasto
+        remoteEl.addEventListener('pointerdown', (e) => {
+            if (!e.target.closest('.rbtn')) return;
+            remoteEl.classList.add('ir');
+            setTimeout(() => remoteEl.classList.remove('ir'), 150);
+        });
+
+        function pressVisual(key) {
+            const btn = remoteEl.querySelector(`.rbtn[data-k="${key}"]`);
+            if (!btn) return;
+            btn.classList.add('pressed');
+            remoteEl.classList.add('ir');
+            setTimeout(() => { btn.classList.remove('pressed'); remoteEl.classList.remove('ir'); }, 140);
+        }
+
+        tvScreen.addEventListener('click', () => showInfo());
+        tvScreen.addEventListener('dblclick', toggleFullscreen);
+
+        // ---------- Ambilight: il muro prende il colore del video ----------
+        const ambiCanvas = document.createElement('canvas');
+        ambiCanvas.width = 2;
+        ambiCanvas.height = 1;
+        const ambiCtx = ambiCanvas.getContext('2d', { willReadFrequently: true });
+        let ambiEnabled = true;
+        setInterval(() => {
+            if (!ambiEnabled || videoPlayer.paused || videoPlayer.readyState < 2) return;
+            try {
+                ambiCtx.drawImage(videoPlayer, 0, 0, 2, 1);
+                const d = ambiCtx.getImageData(0, 0, 2, 1).data;
+                hero.style.setProperty('--ambi-l', `rgb(${d[0]}, ${d[1]}, ${d[2]})`);
+                hero.style.setProperty('--ambi-r', `rgb(${d[4]}, ${d[5]}, ${d[6]})`);
+            } catch (err) {
+                ambiEnabled = false; // flusso senza CORS: resta il bagliore di default
+            }
+        }, 500);
 
         searchInput.addEventListener('input', (e) => {
             const term = e.target.value.toLowerCase().trim();
@@ -577,11 +1007,14 @@
 
         document.addEventListener('keydown', (e) => {
             if (document.activeElement === searchInput) return;
-            if (e.key >= '0' && e.key <= '9') pressNum(e.key);
-            if (e.key === 'Enter') tuneChannel();
-            if (e.key === 'Backspace') clearNum();
-            if (e.key === 'ArrowUp') changeChannel(-1);
-            if (e.key === 'ArrowDown') changeChannel(1);
+            const heroInView = window.scrollY < window.innerHeight / 2;
+            if (e.key >= '0' && e.key <= '9') { pressNum(e.key); pressVisual(e.key); }
+            else if (e.key === 'Enter') { tuneChannel(); pressVisual('ok'); }
+            else if (e.key === 'Backspace') { clearNum(); pressVisual('del'); }
+            else if (e.key === 'ArrowUp' && heroInView) { e.preventDefault(); changeChannel(1); pressVisual('chup'); }
+            else if (e.key === 'ArrowDown' && heroInView) { e.preventDefault(); changeChannel(-1); pressVisual('chdn'); }
+            else if (e.key === 'm' || e.key === 'M') { toggleMute(); pressVisual('mute'); }
+            else if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); pressVisual('full'); }
         });
 
         loadPlaylist();
