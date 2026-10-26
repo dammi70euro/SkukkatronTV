@@ -186,7 +186,6 @@
             display: flex;
             align-items: center;
             gap: .5rem;
-            margin-top: .9rem;
             font-size: .7rem;
             letter-spacing: .15em;
             text-transform: uppercase;
@@ -371,12 +370,6 @@
                 <span class="tv-leg r"></span>
             </div>
             <div class="tv-stand" aria-hidden="true"></div>
-            <div class="quality-bar">
-                <label for="qualitySelect">Qualità</label>
-                <select id="qualitySelect" disabled>
-                    <option value="-1">Auto</option>
-                </select>
-            </div>
         </div>
 
         <div class="remote" id="remote" role="group" aria-label="Telecomando">
@@ -437,6 +430,12 @@
 
     <!-- ===== Sotto: guida TV + canali ===== -->
     <main id="guida" class="max-w-7xl w-full mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-3 gap-6 scroll-mt-4">
+        <div class="quality-bar lg:col-span-3 justify-end">
+            <label for="qualitySelect">Qualità</label>
+            <select id="qualitySelect" disabled>
+                <option value="-1">Auto</option>
+            </select>
+        </div>
         <div class="lg:col-span-2 bg-gray-800/80 p-4 rounded-xl border border-gray-700 flex flex-col gap-3">
             <div class="flex justify-between items-center border-b border-gray-700 pb-2 gap-2">
                 <h3 class="font-bold text-sm text-gray-300 flex items-center gap-2">
