@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>SkukkatronTV Lite</title>
+<style>
+    /* Versione minimale: niente framework, niente immagini, niente effetti. */
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #000; color: #ccc; font: 14px/1.35 system-ui, sans-serif; }
+    header { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .75rem; padding: .4rem .75rem; background: #111; }
+    header b { color: #fff; }
+    #status { flex: 1 1 12rem; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #888; font-size: 12px; }
+    #num { font: 700 16px monospace; color: #4ade80; min-width: 3ch; }
+    video { display: block; width: 100%; max-height: 62vh; aspect-ratio: 16 / 9; background: #000; }
+    main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1px; background: #222; }
+    section { background: #0b0b0b; padding: .5rem; min-width: 0; }
+    h2 { margin: 0 0 .4rem; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: #888; display: flex; justify-content: space-between; gap: .5rem; }
+    h2 small { text-transform: none; letter-spacing: 0; color: #4a8; }
+    .q { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: #888; white-space: nowrap; }
+    .q select { width: 9rem; text-transform: none; letter-spacing: normal; margin-left: .3rem; }
+    select:disabled { opacity: .5; }
+    input, select { background: #1a1a1a; color: #ddd; border: 1px solid #333; border-radius: 4px; padding: .25rem .4rem; font: inherit; font-size: 12px; }
+    input { width: 100%; margin-bottom: .4rem; }
+    ul { list-style: none; margin: 0; padding: 0; height: 45vh; overflow-y: auto; }
+    li { padding: .3rem .4rem; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; content-visibility: auto; contain-intrinsic-size: auto 26px; }
+    li:hover { background: #1a1a1a; }
+    li.on { background: #12305a; color: #fff; }
+    li i { display: inline-block; width: 3.2ch; margin-right: .5rem; text-align: right; font: 700 12px monospace; font-style: normal; color: #5b8def; }
+    #epg { height: calc(45vh + 2rem); overflow-y: auto; }
+    .p { padding: .3rem .4rem; border-left: 2px solid transparent; }
+    .p.now { border-color: #5b8def; background: #0f1a2d; color: #fff; }
+    .p span { font: 12px monospace; color: #888; margin-right: .5rem; }
+    .muted { color: #666; font-size: 12px; padding: .5rem 0; }
+    @media (max-width: 700px) {
+        main { grid-template-columns: 1fr; }
+        #epg { height: auto; max-height: 40vh; }
+    }
+</style>
+</head>
+<body>
+<header>
+    <b>SkukkatronTV</b>
+    <span id="num"></span>
+    <span id="status">Caricamento canali…</span>
+    <label class="q">Qualità <select id="quality" disabled><option value="-1">Auto</option></select></label>
+</header>
+<video id="video" controls playsinline preload="none"></video>
+<main>
+    <section>
+        <h2>Guida TV <small id="epgSource"></small></h2>
+        <div id="epg"><p class="muted">Seleziona un canale.</p></div>
+    </section>
+    <section>
+        <h2>Canali <small id="count"></small></h2>
+        <input id="search" type="search" placeholder="Cerca canale o LCN…" autocomplete="off">
+        <ul id="list"></ul>
+    </section>
+</main>
+<script>
+const PLAYLIST_URL = 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_italy.m3u8';
+// hls.js (build "light") si scarica solo se il browser non legge HLS da solo
+const HLS_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.light.min.js';
+// Buffer corto e risoluzione limitata alla dimensione del player: meno RAM e meno decodifica
+const HLS_CONFIG = {
+    enableWorker: false,
+    capLevelToPlayerSize: true,
+    maxBufferLength: 10,
+    maxMaxBufferLength: 20,
+    maxBufferSize: 15 * 1000 * 1000,
+    backBufferLength: 0,
+    liveSyncDurationCount: 3
+};
+
+const RAI_SLUG = {
+    'rai 1': 'rai-1', 'rai 2': 'rai-2', 'rai 3': 'rai-3', 'rai 4': 'rai-4', 'rai 5': 'rai-5',
+    'rai movie': 'rai-movie', 'rai premium': 'rai-premium', 'rai gulp': 'rai-gulp',
+    'rai yoyo': 'rai-yoyo', 'rai storia': 'rai-storia', 'rai scuola': 'rai-scuola',
+    'rai news 24': 'rai-news-24', 'rai sport': 'rai-sport'
+};
+const RAI_TVG = {
+    Rai1: 'rai-1', Rai2: 'rai-2', Rai3: 'rai-3', Rai4: 'rai-4', Rai5: 'rai-5',
+    RaiMovie: 'rai-movie', RaiPremium: 'rai-premium', RaiGulp: 'rai-gulp',
+    RaiYoyo: 'rai-yoyo', RaiStoria: 'rai-storia', RaiNews24: 'rai-news-24', RaiSport: 'rai-sport'
+};
+const MEDIASET_CODE = {
+    'canale 5': 'C5', 'italia 1': 'I1', 'rete 4': 'R4', 'la 5': 'KA', 'la5': 'KA',
+    'italia 2': 'I2', 'iris': 'KI', 'twentyseven': 'B6', '27 twentyseven': 'B6',
+    'tgcom24': 'KF', 'mediaset extra': 'KQ'
+};
+const LCN = {
+    "rai 1": 1, "rai 2": 2, "rai 3": 3, "rete 4": 4, "canale 5": 5, "italia 1": 6,
+    "la7": 7, "tv8": 8, "nove": 9, "20": 20, "20 mediaset": 20, "rai 4": 21,
+    "iris": 22, "rai 5": 23, "rai movie": 24, "rai premium": 25, "cielo": 26,
+    "twentyseven": 27, "27": 27, "tv2000": 28, "la7d": 29, "la5": 30, "real time": 31,
+    "qvc": 32, "food network": 33, "cine34": 34, "focus": 35, "rtl 102.5": 36,
+    "giallo": 38, "top crime": 39, "boing": 40, "rai gulp": 42, "rai yoyo": 43,
+    "cartoonito": 46, "super!": 47, "rai news 24": 48, "italia 2": 49, "sky tg24": 50,
+    "tgcom24": 51, "dmax": 52, "rai storia": 54, "mediaset extra": 55, "hgtv": 56,
+    "rai sport": 58, "sportitalia": 60, "supertennis": 64, "deejay tv": 69, "radioitalia tv": 70
+};
+
+const $ = (id) => document.getElementById(id);
+const video = $('video'), list = $('list'), search = $('search'), statusEl = $('status');
+const epgEl = $('epg'), epgSource = $('epgSource'), quality = $('quality'), numEl = $('num');
+const nativeHls = video.canPlayType('application/vnd.apple.mpegurl') !== '';
+
+let channels = [];
+let items = [];
+let current = -1;
+let hls = null;
+let hlsLoading = null;
+let epgReq = 0;
+let digits = '';
+let digitTimer = null;
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const hhmm = (d) => d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+
+function clean(name) {
+    return name
+        .replace(/[①-⓿Ⓐ-ⓩ]/g, '')
+        .replace(/\[.*?\]|\(.*?\)/g, '')
+        .replace(/\b(hd|sd|fhd|uhd|4k)\b/gi, '')
+        .replace(/[^a-zA-Z0-9\s!]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+const matchKey = (name) => clean(name).replace(/\b(tv|italia|it)\b/g, ' ').replace(/\s+/g, ' ').trim();
+
+// ---------- Playlist ----------
+async function loadPlaylist() {
+    try {
+        const res = await fetch(PLAYLIST_URL);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        parse(await res.text());
+        statusEl.textContent = 'Pronto · digita un numero o scegli un canale';
+    } catch (err) {
+        statusEl.textContent = 'Errore di caricamento playlist';
+    }
+}
+
+function parse(text) {
+    const raw = [];
+    let ch = null;
+    for (const line of text.split('\n')) {
+        const l = line.trim();
+        if (l.startsWith('#EXTINF:')) {
+            const chno = (l.match(/tvg-chno="([^"]*)"/) || [])[1];
+            ch = {
+                name: l.slice(l.lastIndexOf(',') + 1).trim() || 'Canale',
+                tvgId: (l.match(/tvg-id="([^"]*)"/) || [])[1] || '',
+                chno: chno ? parseInt(chno, 10) : 0
+            };
+        } else if (ch && l && !l.startsWith('#')) {
+            ch.url = l;
+            raw.push(ch);
+            ch = null;
+        }
+    }
+
+    let extra = 0;
+    channels = raw.map((c) => {
+        const key = clean(c.name);
+        let lcn = c.chno;
+        if (!lcn) for (const k in LCN) if (key === k || key.startsWith(k)) { lcn = LCN[k]; break; }
+        if (!lcn) lcn = 900 + extra++;
+        return { name: c.name, url: c.url, tvgId: c.tvgId, lcn, key };
+    }).sort((a, b) => a.lcn - b.lcn);
+
+    // Lista costruita una volta sola; ricerca e canale attivo toccano solo attributi
+    list.innerHTML = channels.map((c, i) => `<li data-i="${i}"><i>${c.lcn}</i>${esc(c.name)}</li>`).join('');
+    items = [...list.children];
+    $('count').textContent = channels.length;
+}
+
+list.addEventListener('click', (e) => {
+    const li = e.target.closest('li');
+    if (li) play(+li.dataset.i);
+});
+
+search.addEventListener('input', () => {
+    const t = search.value.toLowerCase().trim();
+    channels.forEach((c, i) => {
+        items[i].hidden = !!t && !(c.key.includes(t) || c.name.toLowerCase().includes(t) || String(c.lcn) === t);
+    });
+});
+
+// ---------- Player ----------
+function loadHls() {
+    if (window.Hls) return Promise.resolve();
+    return hlsLoading ||= new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = HLS_URL;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+}
+
+function stop() {
+    if (hls) { hls.destroy(); hls = null; }
+    quality.innerHTML = '<option value="-1">Auto</option>';
+    quality.disabled = true;
+    video.removeAttribute('src');
+    video.load();
+}
+
+async function play(i) {
+    if (i < 0 || i >= channels.length) return;
+    items[current]?.classList.remove('on');
+    current = i;
+    items[i].classList.add('on');
+    items[i].scrollIntoView({ block: 'nearest' });
+
+    const c = channels[i];
+    statusEl.textContent = `${c.lcn} · ${c.name} · connessione…`;
+    stop();
+    loadEpg(c);
+
+    if (nativeHls) {
+        playNative(c.url);
+        video.addEventListener('playing', () => { statusEl.textContent = `${c.lcn} · ${c.name}`; }, { once: true });
+        loadVariants(c, i);
+        return;
+    }
+
+    try {
+        await loadHls();
+    } catch (err) {
+        statusEl.textContent = 'Impossibile caricare il lettore HLS';
+        return;
+    }
+    if (current !== i || !Hls.isSupported()) return;
+
+    hls = new Hls(HLS_CONFIG);
+    hls.loadSource(c.url);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        fillQuality(hls.levels);
+        video.play().catch(() => {});
+        statusEl.textContent = `${c.lcn} · ${c.name}`;
+    });
+    hls.on(Hls.Events.ERROR, (ev, data) => {
+        if (data.fatal) statusEl.textContent = `${c.lcn} · ${c.name} · flusso non disponibile`;
+    });
+}
+
+function playNative(url) {
+    video.src = url;
+    video.play().catch(() => {});
+}
+
+// levels: [{ height, bitrate }], l'indice è quello usato da hls.js o da `variants`
+function fillQuality(levels) {
+    if (levels.length < 2) return;
+    quality.innerHTML = '<option value="-1">Auto</option>' + levels
+        .map((l, i) => ({ l, i }))
+        .sort((a, b) => (b.l.height - a.l.height) || (b.l.bitrate - a.l.bitrate))
+        .map(({ l, i }) => {
+            const kbps = Math.round(l.bitrate / 1000) + ' kbps';
+            const twin = levels.filter((x) => x.height === l.height).length > 1;
+            return `<option value="${i}">${!l.height ? kbps : twin ? `${l.height}p · ${kbps}` : l.height + 'p'}</option>`;
+        })
+        .join('');
+    quality.disabled = false;
+}
+
+// HLS nativo: il browser non espone i livelli, li leggo dalla master playlist
+let variants = [];
+async function loadVariants(c, i) {
+    variants = [];
+    try {
+        const res = await fetch(c.url);
+        if (!res.ok) return;
+        const lines = (await res.text()).split('\n').map((l) => l.trim());
+        const found = [];
+        lines.forEach((l, n) => {
+            if (!l.startsWith('#EXT-X-STREAM-INF:')) return;
+            const uri = lines.slice(n + 1).find((x) => x && !x.startsWith('#'));
+            if (!uri) return;
+            found.push({
+                height: +((l.match(/RESOLUTION=\d+x(\d+)/) || [])[1] || 0),
+                bitrate: +((l.match(/[:,]BANDWIDTH=(\d+)/) || [])[1] || 0),
+                url: new URL(uri, res.url).href
+            });
+        });
+        if (current !== i) return;
+        variants = found;
+        fillQuality(variants);
+    } catch (err) {
+        // flusso senza CORS: resta la qualità automatica del browser
+    }
+}
+
+quality.addEventListener('change', () => {
+    const v = +quality.value;
+    if (hls) hls.currentLevel = v;
+    else if (current >= 0) playNative(v === -1 ? channels[current].url : variants[v].url);
+});
+
+// ---------- Guida TV (RaiPlay + Mediaset, API pubbliche con CORS) ----------
+function romeDateKey() {
+    const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', year: 'numeric' }).formatToParts(new Date());
+    const g = (t) => p.find((x) => x.type === t).value;
+    return `${g('day')}-${g('month')}-${g('year')}`;
+}
+
+function raiSlug(c) {
+    const k = matchKey(c.name);
+    for (const n in RAI_SLUG) if (k === n || k.startsWith(n + ' ')) return RAI_SLUG[n];
+    if (/^rai/i.test(c.tvgId)) return RAI_TVG[c.tvgId.replace(/\.it$/i, '')] || null;
+    return null;
+}
+
+function raiMinutes(ev) {
+    if (typeof ev.duration_in_minutes === 'number') return ev.duration_in_minutes;
+    const m = String(ev.duration_in_minutes || '').match(/(\d+)/);
+    if (m) return +m[1];
+    const p = String(ev.duration || '').split(':').map(Number);
+    return p.length === 3 && p.every((n) => !isNaN(n)) ? p[0] * 60 + p[1] + Math.round(p[2] / 60) : 30;
+}
+
+async function raiEpg(c) {
+    const slug = raiSlug(c);
+    if (!slug) return null;
+    const key = romeDateKey();
+    const res = await fetch(`https://www.raiplay.it/palinsesto/app/${slug}/${key}.json`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const progs = [];
+    for (const ev of data.events || []) {
+        const dm = String(ev.date || data.date || key).replace(/\//g, '-').match(/(\d{2})-(\d{2})-(\d{4})/);
+        const hm = String(ev.hour || '').match(/(\d{1,2}):(\d{2})/);
+        if (!dm || !hm) continue;
+        const start = new Date(+dm[3], dm[2] - 1, +dm[1], +hm[1], +hm[2]);
+        progs.push({ start, stop: new Date(start.getTime() + raiMinutes(ev) * 60000), title: ev.name || ev.program?.name || 'Programma' });
+    }
+    for (let i = 0; i < progs.length - 1; i++) {
+        if (progs[i].stop > progs[i + 1].start && progs[i + 1].start > progs[i].start) progs[i].stop = progs[i + 1].start;
+    }
+    const now = Date.now();
+    const next = progs.filter((p) => p.stop - p.start >= 60000 && p.stop.getTime() > now - 300000);
+    return next.length ? { progs: next.slice(0, 8), source: 'RaiPlay' } : null;
+}
+
+async function mediasetEpg(c) {
+    const k = matchKey(c.name);
+    let code = null;
+    for (const n in MEDIASET_CODE) if (k === n || k.startsWith(n + ' ') || k.includes(n)) { code = MEDIASET_CODE[n]; break; }
+    if (!code) return null;
+    const res = await fetch(`https://static3.mediasetplay.mediaset.it/apigw/nownext/${code}.json`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.isOk || !data.response) return null;
+    const prog = (l) => l?.startTime && l?.endTime ? {
+        start: new Date(l.startTime),
+        stop: new Date(l.endTime),
+        title: l['mediasetlisting$epgTitle'] || l.program?.['mediasetprogram$brandTitle'] || l.program?.title || l.description || 'Programma'
+    } : null;
+    const progs = [prog(data.response.currentListing), prog(data.response.nextListing)].filter(Boolean);
+    return progs.length ? { progs, source: 'Mediaset' } : null;
+}
+
+async function loadEpg(c) {
+    const req = ++epgReq;
+    epgSource.textContent = '';
+    epgEl.innerHTML = '<p class="muted">Caricamento…</p>';
+    let r = null;
+    try { r = await raiEpg(c); } catch (err) { /* prova Mediaset */ }
+    if (!r) try { r = await mediasetEpg(c); } catch (err) { /* nessuna guida */ }
+    if (req !== epgReq) return;
+    if (!r) {
+        epgEl.innerHTML = '<p class="muted">Guida non disponibile per questo canale (solo Rai e Mediaset).</p>';
+        return;
+    }
+    const now = new Date();
+    epgSource.textContent = r.source;
+    epgEl.innerHTML = r.progs.map((p) =>
+        `<div class="p${now >= p.start && now <= p.stop ? ' now' : ''}"><span>${hhmm(p.start)}–${hhmm(p.stop)}</span>${esc(p.title)}</div>`
+    ).join('');
+}
+
+// ---------- Tastiera ----------
+function tune() {
+    clearTimeout(digitTimer);
+    const lcn = parseInt(digits, 10);
+    digits = '';
+    const i = channels.findIndex((c) => c.lcn === lcn);
+    numEl.textContent = i === -1 ? 'N.A.' : '';
+    if (i !== -1) play(i);
+    else setTimeout(() => { numEl.textContent = ''; }, 1200);
+}
+
+function zap(dir) {
+    if (!channels.length) return;
+    play((current + dir + channels.length) % channels.length);
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.target === search || e.target === quality) {
+        if (e.key === 'Escape') e.target.blur();
+        return;
+    }
+    if (e.key >= '0' && e.key <= '9') {
+        if (digits.length < 3) digits += e.key;
+        numEl.textContent = digits;
+        clearTimeout(digitTimer);
+        digitTimer = setTimeout(tune, 1500);
+    } else if (e.key === 'Enter' && digits) tune();
+    else if (e.key === 'ArrowUp') { e.preventDefault(); zap(1); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); zap(-1); }
+    else if (e.key === 'm' || e.key === 'M') video.muted = !video.muted;
+    else if (e.key === 'f' || e.key === 'F') document.fullscreenElement ? document.exitFullscreen() : video.requestFullscreen?.();
+    else if (e.key === '/') { e.preventDefault(); search.focus(); }
+});
+
+loadPlaylist();
+</script>
+</body>
+</html>
