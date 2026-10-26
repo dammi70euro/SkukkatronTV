@@ -171,6 +171,58 @@
         }
         .osd-num.show, .osd-info.show { opacity: 1; transform: none; }
 
+        /* Pannello guida + canali dentro lo schermo (tasto INFO) */
+        .tv-panel {
+            position: absolute;
+            inset: 0;
+            z-index: 4;
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+            padding: 2.2% 2.6%;
+            font-size: .8rem;
+            background: linear-gradient(160deg, rgba(8, 12, 26, .95), rgba(4, 6, 14, .97));
+            backdrop-filter: blur(8px);
+            cursor: default;
+            opacity: 0;
+            visibility: hidden;
+            transform: scale(1.03);
+            transition: opacity .25s, transform .25s, visibility .25s;
+        }
+        .tv-panel.open { opacity: 1; visibility: visible; transform: none; }
+        .tv-panel-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: .75rem;
+            font-size: .75rem;
+        }
+        .tv-panel-close {
+            width: 1.6rem;
+            height: 1.6rem;
+            border-radius: 50%;
+            color: #9ca3af;
+            background: rgba(255, 255, 255, .06);
+        }
+        .tv-panel-close:hover { color: #fff; background: rgba(255, 255, 255, .14); }
+        .tv-panel-body {
+            flex: 1;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+            gap: .9rem;
+        }
+        .tv-panel-col {
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            padding: .6rem;
+            border-radius: .6rem;
+            background: rgba(31, 41, 55, .55);
+            border: 1px solid rgba(255, 255, 255, .07);
+        }
+        .tv-panel-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+
         .tv-stand {
             position: relative;
             width: 118%;
@@ -300,28 +352,13 @@
         .rbtn.r { --c: #c4372d; }
         .rbtn.b { --c: #3c6c9c; }
 
-        .scroll-hint {
-            position: absolute;
-            left: 50%;
-            bottom: 1.1rem;
-            transform: translateX(-50%);
-            z-index: 5;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: .15rem;
-            font-size: .7rem;
-            letter-spacing: .25em;
-            text-transform: uppercase;
-            color: #9ca3af;
-            animation: bob 2s ease-in-out infinite;
-        }
-        .scroll-hint:hover { color: #fff; }
-        @keyframes bob { 50% { transform: translate(-50%, 6px); } }
 
         @media (max-width: 700px) {
-            .hero { min-height: auto; padding-bottom: 4.5rem; }
+            .hero { min-height: auto; padding-bottom: 3rem; }
             .tv-wrap { --tv-w: 94vw; margin-top: 5.25rem; }
+            .tv-panel { padding: 2%; gap: .3rem; font-size: .65rem; }
+            .tv-panel-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .4rem; }
+            .tv-panel-col { padding: .35rem; }
             .remote {
                 position: relative;
                 right: auto;
@@ -332,7 +369,7 @@
             }
         }
         @media (prefers-reduced-motion: reduce) {
-            .scroll-hint, .static, .tv-screen.switching { animation: none; }
+            .static, .tv-screen.switching { animation: none; }
         }
     </style>
 </head>
@@ -349,7 +386,7 @@
                     <div id="playerPlaceholder" class="screen-off">
                         <div class="text-2xl sm:text-4xl font-black tracking-[.3em] text-gray-700">SKUKKATRON</div>
                         <p class="text-xs sm:text-sm">Premi un numero o il tasto rosso sul telecomando</p>
-                        <p class="hidden sm:block text-[11px] text-gray-600">Tastiera: 0–9 · Invio · ↑ ↓ · M muto · F schermo intero</p>
+                        <p class="hidden sm:block text-[11px] text-gray-600">Tastiera: 0–9 · Invio · ↑ ↓ · I guida · M muto · F schermo intero</p>
                     </div>
 
                     <div id="loadingSpinner" class="static hidden" aria-hidden="true"></div>
@@ -361,6 +398,45 @@
                         <div class="min-w-0">
                             <h2 id="currentChannelName" class="text-sm sm:text-lg font-semibold text-gray-100 truncate">Nessun canale in riproduzione</h2>
                             <p id="currentChannelStatus" class="text-[11px] sm:text-xs text-gray-400">Pronto</p>
+                        </div>
+                    </div>
+
+                    <div id="tvPanel" class="tv-panel" aria-hidden="true">
+                        <div class="tv-panel-head">
+                            <span class="font-bold text-gray-200 tracking-wider whitespace-nowrap">GUIDA &amp; CANALI</span>
+                            <div class="flex items-center gap-3">
+                                <div class="quality-bar">
+                                    <label for="qualitySelect">Qualità</label>
+                                    <select id="qualitySelect" disabled>
+                                        <option value="-1">Auto</option>
+                                    </select>
+                                </div>
+                                <button class="tv-panel-close" onclick="togglePanel(false)" aria-label="Chiudi">✕</button>
+                            </div>
+                        </div>
+                        <div class="tv-panel-body">
+                            <section class="tv-panel-col">
+                                <div class="flex justify-between items-center border-b border-gray-700 pb-1.5 gap-2">
+                                    <h3 class="font-bold text-gray-300">Guida TV</h3>
+                                    <span id="epgStatus" class="text-[10px] text-emerald-400/90 text-right">EPG · RaiPlay + Mediaset</span>
+                                </div>
+                                <div id="epgContainer" class="tv-panel-scroll flex flex-col gap-2 pt-2">
+                                    <p class="text-xs text-gray-500 text-center py-6">Seleziona un canale per caricare la guida TV.</p>
+                                </div>
+                            </section>
+                            <section id="canali" class="tv-panel-col">
+                                <div class="flex flex-col gap-1.5 border-b border-gray-700 pb-1.5">
+                                    <div class="flex justify-between items-center">
+                                        <h3 class="font-bold text-gray-300">Canali DTT LCN</h3>
+                                        <span id="channelCount" class="bg-gray-700 text-[10px] px-2 py-0.5 rounded-full text-gray-400">0 canali</span>
+                                    </div>
+                                    <input type="text" id="searchInput" placeholder="Cerca canale o LCN..."
+                                        class="w-full bg-gray-700 border border-gray-600 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400">
+                                </div>
+                                <div id="channelList" class="tv-panel-scroll space-y-1.5 pt-2 pr-1">
+                                    <div class="text-center py-8 text-gray-400 text-sm">Sintonizzazione in corso...</div>
+                                </div>
+                            </section>
                         </div>
                     </div>
                 </div>
@@ -413,7 +489,7 @@
                     <button class="rbtn g" data-k="ok" data-l="OK" onclick="tuneChannel()" aria-label="OK"></button>
                     <span></span>
 
-                    <button class="rbtn b" data-k="info" data-l="INFO" onclick="showInfo()" aria-label="Info canale"></button>
+                    <button class="rbtn b" data-k="info" data-l="INFO" onclick="togglePanel()" aria-label="Guida e canali"></button>
                     <span></span>
                     <button class="rbtn r" data-k="power" data-l="POWER" onclick="powerToggle()" aria-label="Accendi o spegni"></button>
                     <span></span>
@@ -422,47 +498,7 @@
             </div>
         </div>
 
-        <a href="#guida" class="scroll-hint">
-            Guida TV
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-        </a>
     </section>
-
-    <!-- ===== Sotto: guida TV + canali ===== -->
-    <main id="guida" class="max-w-7xl w-full mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-3 gap-6 scroll-mt-4">
-        <div class="quality-bar lg:col-span-3 justify-end">
-            <label for="qualitySelect">Qualità</label>
-            <select id="qualitySelect" disabled>
-                <option value="-1">Auto</option>
-            </select>
-        </div>
-        <div class="lg:col-span-2 bg-gray-800/80 p-4 rounded-xl border border-gray-700 flex flex-col gap-3">
-            <div class="flex justify-between items-center border-b border-gray-700 pb-2 gap-2">
-                <h3 class="font-bold text-sm text-gray-300 flex items-center gap-2">
-                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                    Programmazione Guida TV (EPG)
-                </h3>
-                <span id="epgStatus" class="text-[11px] text-emerald-400/90 text-right">EPG · RaiPlay + Mediaset</span>
-            </div>
-            <div id="epgContainer" class="flex flex-col gap-2 min-h-[100px]">
-                <p class="text-xs text-gray-500 text-center py-6">Seleziona un canale per caricare la guida TV.</p>
-            </div>
-        </div>
-
-        <div id="canali" class="bg-gray-800/80 rounded-xl border border-gray-700 flex flex-col h-[28rem] lg:h-[36rem] overflow-hidden shadow-xl scroll-mt-4">
-            <div class="p-3 border-b border-gray-700 flex flex-col gap-2">
-                <div class="flex justify-between items-center">
-                    <h3 class="font-bold text-sm text-gray-300">Canali DTT LCN</h3>
-                    <span id="channelCount" class="bg-gray-700 text-xs px-2 py-0.5 rounded-full text-gray-400">0 canali</span>
-                </div>
-                <input type="text" id="searchInput" placeholder="Cerca canale o LCN..."
-                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400">
-            </div>
-            <div id="channelList" class="overflow-y-auto p-2 space-y-1.5 flex-1">
-                <div class="text-center py-8 text-gray-400 text-sm">Sintonizzazione in corso...</div>
-            </div>
-        </div>
-    </main>
 
     <script>
         const PLAYLIST_URL = 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_italy.m3u8';
@@ -525,6 +561,7 @@
         const remoteDisplay = document.getElementById('remoteDisplay');
         const epgContainer = document.getElementById('epgContainer');
         const epgStatus = document.getElementById('epgStatus');
+        const tvPanel = document.getElementById('tvPanel');
 
         function escapeHtml(str) {
             return String(str ?? '')
@@ -819,7 +856,7 @@
                 `;
                 item.addEventListener('click', () => {
                     playChannel(globalIdx);
-                    hero.scrollIntoView({ behavior: 'smooth' });
+                    togglePanel(false);
                 });
                 channelListEl.appendChild(item);
             });
@@ -1027,12 +1064,18 @@
             else if (videoPlayer.webkitEnterFullscreen) videoPlayer.webkitEnterFullscreen();
         }
 
+        function togglePanel(open = !tvPanel.classList.contains('open')) {
+            tvPanel.classList.toggle('open', open);
+            tvPanel.setAttribute('aria-hidden', String(!open));
+            if (!open && tvPanel.contains(document.activeElement)) document.activeElement.blur();
+        }
+
         function goToGuide() {
-            document.getElementById('guida').scrollIntoView({ behavior: 'smooth' });
+            togglePanel(true);
         }
 
         function goToChannels() {
-            document.getElementById('canali').scrollIntoView({ behavior: 'smooth' });
+            togglePanel(true);
             searchInput.focus({ preventScroll: true });
         }
 
@@ -1051,7 +1094,9 @@
             setTimeout(() => { btn.classList.remove('pressed'); remoteEl.classList.remove('ir'); }, 140);
         }
 
-        tvScreen.addEventListener('click', () => showInfo());
+        tvScreen.addEventListener('click', (e) => {
+            if (!e.target.closest('.tv-panel')) showInfo();
+        });
 
         // ---------- Ambilight: il muro prende il colore del video ----------
         const ambiCanvas = document.createElement('canvas');
@@ -1080,6 +1125,7 @@
         });
 
         document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { togglePanel(false); return; }
             if (document.activeElement === searchInput) return;
             const heroInView = window.scrollY < window.innerHeight / 2;
             if (e.key >= '0' && e.key <= '9') { pressNum(e.key); pressVisual(e.key); }
@@ -1087,6 +1133,7 @@
             else if (e.key === 'Backspace') { clearNum(); pressVisual('del'); }
             else if (e.key === 'ArrowUp' && heroInView) { e.preventDefault(); changeChannel(1); pressVisual('chup'); }
             else if (e.key === 'ArrowDown' && heroInView) { e.preventDefault(); changeChannel(-1); pressVisual('chdn'); }
+            else if (e.key === 'i' || e.key === 'I') { togglePanel(); pressVisual('info'); }
             else if (e.key === 'm' || e.key === 'M') { toggleMute(); pressVisual('mute'); }
             else if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); pressVisual('full'); }
             else if ((e.key === 'q' || e.key === 'Q') && document.activeElement !== qualitySelect) { cycleQuality(); pressVisual('quality'); }
