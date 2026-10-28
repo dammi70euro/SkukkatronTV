@@ -116,10 +116,10 @@
             inset: 0;
             z-index: 2;
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             align-items: center;
             justify-content: center;
-            gap: .6rem;
+            gap: 5%;
             text-align: center;
             padding: 1.5rem;
             background: radial-gradient(ellipse at center, #0d1220, #000 70%);
@@ -245,9 +245,11 @@
         .tv-panel-pair .pair-qr svg { height: 100%; }
 
         /* Telefono come telecomando: QR + modalità ?remote= */
-        .pair-qr { background: #fff; padding: 4px; border-radius: 6px; line-height: 0; }
-        .pair-qr svg { display: block; width: 100%; height: auto; }
-        .screen-off .pair-qr { width: 14%; margin-top: .3rem; }
+        /* Il margine bianco (4 moduli) è già nell'SVG: serve ai lettori per agganciare il codice */
+        .pair-qr { background: #fff; border-radius: 4px; line-height: 0; }
+        .pair-qr svg { display: block; width: 100%; height: 100%; shape-rendering: crispEdges; }
+        .screen-off-text { display: flex; flex-direction: column; align-items: center; gap: .6rem; min-width: 0; }
+        .screen-off .pair-qr { flex: none; height: 62%; aspect-ratio: 1; }
         .screen-off .pair-qr:empty { display: none; }
         .rc-status { display: none; }
         body.remote-mode .hero {
@@ -434,11 +436,13 @@
                     <video id="videoPlayer" controls autoplay playsinline></video>
 
                     <div id="playerPlaceholder" class="screen-off">
-                        <div class="text-2xl sm:text-4xl font-black tracking-[.3em] text-gray-700">SKUKKATRON</div>
-                        <p class="text-xs sm:text-sm">Premi un numero o il tasto rosso sul telecomando</p>
-                        <p class="hidden sm:block text-[11px] text-gray-600">Tastiera: 0–9 · Invio · ↑ ↓ · I guida · M muto · F schermo intero</p>
+                        <div class="screen-off-text">
+                            <div class="text-2xl sm:text-4xl font-black tracking-[.3em] text-gray-700">SKUKKATRON</div>
+                            <p class="text-xs sm:text-sm">Premi un numero o il tasto rosso sul telecomando</p>
+                            <p class="hidden sm:block text-[11px] text-gray-600">Tastiera: 0–9 · Invio · ↑ ↓ · I guida · M muto · F schermo intero</p>
+                            <p id="pairHintOff" class="hidden text-[10px] sm:text-xs text-gray-400">📱 Inquadra il codice per usare il telefono come telecomando</p>
+                        </div>
                         <div id="pairQrOff" class="pair-qr"></div>
-                        <p id="pairHintOff" class="hidden text-[10px] sm:text-[11px] text-gray-500">📱 Inquadra per usare il telefono come telecomando</p>
                     </div>
 
                     <div id="loadingSpinner" class="static hidden" aria-hidden="true"></div>
@@ -1472,11 +1476,11 @@
 
         function readPairing() {
             try {
-                const saved = JSON.parse(sessionStorage.getItem('skt-pair'));
+                const saved = JSON.parse(sessionStorage.getItem('skt-pair2'));
                 if (saved && saved.id && saved.key) return saved;
             } catch (err) { /* storage non disponibile */ }
-            const pair = { id: toHex(randomBytes(16)), key: toB64u(randomBytes(32)) };
-            try { sessionStorage.setItem('skt-pair', JSON.stringify(pair)); } catch (err) { /* pazienza */ }
+            const pair = { id: toB64u(randomBytes(12)), key: toB64u(randomBytes(16)) };
+            try { sessionStorage.setItem('skt-pair2', JSON.stringify(pair)); } catch (err) { /* pazienza */ }
             return pair;
         }
 
@@ -1494,7 +1498,7 @@
                 const qr = qrcode(0, 'L');
                 qr.addData(url);
                 qr.make();
-                const svg = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+                const svg = qr.createSvgTag({ cellSize: 4, margin: 16, scalable: true });
                 document.getElementById('pairQr').innerHTML = svg;
                 document.getElementById('pairQrOff').innerHTML = svg;
                 document.getElementById('pairHintOff').classList.remove('hidden');
@@ -1525,7 +1529,7 @@
             let keyBytes;
             try {
                 keyBytes = fromB64u(keyText);
-                if (keyBytes.length !== 32 || !/^[0-9a-f]{32}$/.test(pairId)) throw new Error('codice');
+                if (keyBytes.length !== 16 || !/^[A-Za-z0-9_-]{16}$/.test(pairId)) throw new Error('codice');
             } catch (err) {
                 statusEl.textContent = 'Codice non valido: inquadra di nuovo il QR sulla TV';
                 return;
