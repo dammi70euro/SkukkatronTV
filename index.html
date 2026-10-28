@@ -190,6 +190,19 @@
             transition: opacity .25s, transform .25s, visibility .25s;
         }
         .tv-panel.open { opacity: 1; visibility: visible; transform: none; }
+
+        body.cinema { overflow: hidden; }
+        body.cinema .tv { z-index: 100; }
+        body.cinema .tv-screen {
+            position: fixed;
+            inset: 0;
+            aspect-ratio: auto;
+            border-radius: 0;
+        }
+        body.cinema .tv-screen::after,
+        body.cinema .tv-brand,
+        body.cinema .tv-led,
+        body.cinema .tv-leg { display: none; }
         .tv-panel-head {
             display: flex;
             justify-content: space-between;
@@ -1033,6 +1046,7 @@
 
             renderChannels(channels);
             renderEPG(channel);
+            if (Date.now() - lastRemoteCommand < 3000) enterFullscreen();
             publishState();
 
             if (hls) {
@@ -1074,6 +1088,7 @@
         }
 
         function powerOff() {
+            exitCinema();
             if (hls) {
                 hls.destroy();
                 hls = null;
@@ -1147,8 +1162,25 @@
 
         function toggleFullscreen() {
             if (document.fullscreenElement) document.exitFullscreen();
-            else if (videoPlayer.requestFullscreen) videoPlayer.requestFullscreen();
-            else if (videoPlayer.webkitEnterFullscreen) videoPlayer.webkitEnterFullscreen();
+            else if (document.body.classList.contains('cinema')) exitCinema();
+            else enterFullscreen();
+        }
+
+        // Senza un clic sulla pagina (es. comando dal telefono) il browser rifiuta il fullscreen:
+        // allora il video riempie almeno la finestra
+        function enterFullscreen() {
+            if (document.fullscreenElement || document.body.classList.contains('cinema')) return;
+            const request = videoPlayer.requestFullscreen
+                ? videoPlayer.requestFullscreen()
+                : Promise.reject(new Error('fullscreen non supportato'));
+            request.catch(() => {
+                if (videoPlayer.webkitEnterFullscreen && !videoPlayer.requestFullscreen) videoPlayer.webkitEnterFullscreen();
+                else document.body.classList.add('cinema');
+            });
+        }
+
+        function exitCinema() {
+            document.body.classList.remove('cinema');
         }
 
         function togglePanel(open = !tvPanel.classList.contains('open')) {
@@ -1213,7 +1245,7 @@
 
         document.addEventListener('keydown', (e) => {
             if (document.body.classList.contains('remote-mode')) return;
-            if (e.key === 'Escape') { togglePanel(false); return; }
+            if (e.key === 'Escape') { togglePanel(false); exitCinema(); return; }
             if (document.activeElement === searchInput) return;
             const heroInView = window.scrollY < window.innerHeight / 2;
             if (e.key >= '0' && e.key <= '9') { pressNum(e.key); pressVisual(e.key); }
@@ -1448,6 +1480,8 @@
             });
         }
 
+        let lastRemoteCommand = 0;
+
         function onTvMessage(msg) {
             const k = msg.k;
             if (k === 'hello') {
@@ -1457,6 +1491,7 @@
                 publishState();
                 return;
             }
+            lastRemoteCommand = Date.now();
             if (/^[0-9]$/.test(k)) pressNum(k);
             else if (REMOTE_COMMANDS[k]) REMOTE_COMMANDS[k]();
             else return;
