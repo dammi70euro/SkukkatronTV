@@ -222,6 +222,56 @@
             border: 1px solid rgba(255, 255, 255, .07);
         }
         .tv-panel-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+        .tv-panel-btn {
+            padding: .2rem .6rem;
+            border-radius: .5rem;
+            white-space: nowrap;
+            color: #d1d5db;
+            background: rgba(255, 255, 255, .06);
+        }
+        .tv-panel-btn:hover { color: #fff; background: rgba(255, 255, 255, .14); }
+        .tv-panel-pair {
+            display: none;
+            flex: 1;
+            min-height: 0;
+            align-items: center;
+            justify-content: center;
+            gap: 6%;
+            color: #9ca3af;
+        }
+        .tv-panel.pairing .tv-panel-body { display: none; }
+        .tv-panel.pairing .tv-panel-pair { display: flex; }
+        .tv-panel-pair .pair-qr { height: 90%; aspect-ratio: 1; }
+        .tv-panel-pair .pair-qr svg { height: 100%; }
+
+        /* Telefono come telecomando: QR + modalità ?remote= */
+        .pair-qr { background: #fff; padding: 4px; border-radius: 6px; line-height: 0; }
+        .pair-qr svg { display: block; width: 100%; height: auto; }
+        .screen-off .pair-qr { width: 14%; margin-top: .3rem; }
+        .screen-off .pair-qr:empty { display: none; }
+        .rc-status { display: none; }
+        body.remote-mode .hero {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.2rem;
+            padding: 1rem 0 1.5rem;
+        }
+        body.remote-mode .tv-wrap { display: none; }
+        body.remote-mode .rc-status { display: block; font-size: 13px; color: #9ca3af; text-align: center; padding: 0 1rem; }
+        body.remote-mode .remote,
+        body.remote-mode .remote:hover {
+            position: relative;
+            right: auto;
+            bottom: auto;
+            margin: 0;
+            transform: none;
+            font-size: min(4.8vw, 3.1svh);
+            padding-bottom: 3.5em;
+            touch-action: manipulation;
+        }
+        body.remote-mode .rbtn { height: 1.6em; border-radius: .8em; }
 
         .tv-stand {
             position: relative;
@@ -387,6 +437,8 @@
                         <div class="text-2xl sm:text-4xl font-black tracking-[.3em] text-gray-700">SKUKKATRON</div>
                         <p class="text-xs sm:text-sm">Premi un numero o il tasto rosso sul telecomando</p>
                         <p class="hidden sm:block text-[11px] text-gray-600">Tastiera: 0–9 · Invio · ↑ ↓ · I guida · M muto · F schermo intero</p>
+                        <div id="pairQrOff" class="pair-qr"></div>
+                        <p id="pairHintOff" class="hidden text-[10px] sm:text-[11px] text-gray-500">📱 Inquadra per usare il telefono come telecomando</p>
                     </div>
 
                     <div id="loadingSpinner" class="static hidden" aria-hidden="true"></div>
@@ -405,6 +457,7 @@
                         <div class="tv-panel-head">
                             <span class="font-bold text-gray-200 tracking-wider whitespace-nowrap">GUIDA &amp; CANALI</span>
                             <div class="flex items-center gap-3">
+                                <button class="tv-panel-btn" onclick="togglePairing()">📱 Telefono</button>
                                 <div class="quality-bar">
                                     <label for="qualitySelect">Qualità</label>
                                     <select id="qualitySelect" disabled>
@@ -438,6 +491,14 @@
                                 </div>
                             </section>
                         </div>
+                        <div class="tv-panel-pair">
+                            <div id="pairQr" class="pair-qr"></div>
+                            <div class="max-w-[45%] space-y-2">
+                                <p class="font-bold text-gray-200 text-sm sm:text-base">Usa il telefono come telecomando</p>
+                                <p>Inquadra il codice con la fotocamera del telefono. Funziona anche se il telefono è su un’altra rete.</p>
+                                <p id="pairStatus" class="text-gray-500">In attesa del telefono…</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <span class="tv-brand">SKUKKATRON</span>
@@ -447,6 +508,8 @@
             </div>
             <div class="tv-stand" aria-hidden="true"></div>
         </div>
+
+        <p id="rcStatus" class="rc-status" aria-live="polite">Collegamento…</p>
 
         <div class="remote" id="remote" role="group" aria-label="Telecomando">
             <div class="remote-ir"></div>
@@ -928,6 +991,24 @@
 
         qualitySelect.addEventListener('change', applyQuality);
 
+        // Un comando dal telefono non conta come clic sulla pagina: se l'audio è bloccato parte muto
+        let autoMuted = false;
+        function startPlayback() {
+            videoPlayer.play().catch((err) => {
+                if (err.name !== 'NotAllowedError') return;
+                autoMuted = true;
+                videoPlayer.muted = true;
+                videoPlayer.play().catch(() => {});
+                currentChannelStatus.textContent = 'Audio bloccato dal browser: clicca una volta sulla TV';
+                showInfo(true);
+            });
+        }
+        document.addEventListener('pointerdown', () => {
+            if (!autoMuted) return;
+            autoMuted = false;
+            videoPlayer.muted = false;
+        });
+
         function playChannel(index) {
             if (index < 0 || index >= channels.length) return;
 
@@ -948,6 +1029,7 @@
 
             renderChannels(channels);
             renderEPG(channel);
+            publishState();
 
             if (hls) {
                 hls.destroy();
@@ -964,7 +1046,7 @@
 
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
                     populateQuality();
-                    videoPlayer.play().catch(() => {});
+                    startPlayback();
                     currentChannelStatus.textContent = 'In riproduzione';
                     loadingSpinner.classList.add('hidden');
                     showInfo();
@@ -979,7 +1061,7 @@
             } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
                 videoPlayer.src = channel.url;
                 videoPlayer.addEventListener('loadedmetadata', () => {
-                    videoPlayer.play().catch(() => {});
+                    startPlayback();
                     currentChannelStatus.textContent = 'In riproduzione (Safari)';
                     loadingSpinner.classList.add('hidden');
                     showInfo();
@@ -1001,6 +1083,7 @@
             playerPlaceholder.style.display = '';
             osdInfo.classList.remove('show');
             currentChannelStatus.textContent = 'Spento';
+            publishState();
         }
 
         function powerToggle() {
@@ -1125,6 +1208,7 @@
         });
 
         document.addEventListener('keydown', (e) => {
+            if (document.body.classList.contains('remote-mode')) return;
             if (e.key === 'Escape') { togglePanel(false); return; }
             if (document.activeElement === searchInput) return;
             const heroInView = window.scrollY < window.innerHeight / 2;
@@ -1139,7 +1223,346 @@
             else if ((e.key === 'q' || e.key === 'Q') && document.activeElement !== qualitySelect) { cycleQuality(); pressVisual('quality'); }
         });
 
-        loadPlaylist();
+        if (!new URLSearchParams(location.search).has('remote')) loadPlaylist();
+    </script>
+
+    <!-- ===== Telefono come telecomando (MQTT pubblico, comandi firmati) ===== -->
+    <script>
+        // Due broker pubblici in parallelo: TV e telefono si incontrano su quello che risponde.
+        const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+        const QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+        const MQTT_KEEPALIVE = 30;
+        const CMD_MAX_AGE = 2 * 60 * 1000;
+
+        const enc = new TextEncoder();
+        const dec = new TextDecoder();
+
+        const randomBytes = (n) => crypto.getRandomValues(new Uint8Array(n));
+        const toHex = (bytes) => [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+        const toB64u = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const fromB64u = (str) => Uint8Array.from(atob(str.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+
+        // ---------- Client MQTT 3.1.1 minimo (solo QoS 0) ----------
+        function mqttString(str) {
+            const bytes = enc.encode(str);
+            return [bytes.length >> 8, bytes.length & 255, ...bytes];
+        }
+
+        function mqttPacket(header, body) {
+            const len = [];
+            let n = body.length;
+            do {
+                let digit = n % 128;
+                n = Math.floor(n / 128);
+                if (n > 0) digit |= 128;
+                len.push(digit);
+            } while (n > 0);
+            return Uint8Array.from([header, ...len, ...body]);
+        }
+
+        class MiniMqtt {
+            constructor(url, onMessage, onChange) {
+                this.url = url;
+                this.onMessage = onMessage;
+                this.onChange = onChange;
+                this.subs = new Set();
+                this.ready = false;
+                this.retry = 1000;
+                this.packetId = 0;
+                this.connect();
+            }
+
+            connect() {
+                clearTimeout(this.retryTimer);
+                if (this.ws && this.ws.readyState <= WebSocket.OPEN) return;
+                let ws;
+                try {
+                    ws = new WebSocket(this.url, 'mqtt');
+                } catch (err) {
+                    this.scheduleRetry();
+                    return;
+                }
+                ws.binaryType = 'arraybuffer';
+                this.ws = ws;
+                this.buffer = new Uint8Array(0);
+                ws.onopen = () => {
+                    const clientId = 'skt-' + toHex(randomBytes(6));
+                    ws.send(mqttPacket(0x10, [...mqttString('MQTT'), 4, 0x02, MQTT_KEEPALIVE >> 8, MQTT_KEEPALIVE & 255, ...mqttString(clientId)]));
+                };
+                ws.onmessage = (e) => this.feed(new Uint8Array(e.data));
+                ws.onerror = () => ws.close();
+                ws.onclose = () => {
+                    clearInterval(this.pingTimer);
+                    if (this.ws !== ws) return;
+                    this.ready = false;
+                    this.onChange();
+                    this.scheduleRetry();
+                };
+            }
+
+            scheduleRetry() {
+                clearTimeout(this.retryTimer);
+                this.retryTimer = setTimeout(() => this.connect(), this.retry);
+                this.retry = Math.min(this.retry * 2, 15000);
+            }
+
+            feed(chunk) {
+                const merged = new Uint8Array(this.buffer.length + chunk.length);
+                merged.set(this.buffer);
+                merged.set(chunk, this.buffer.length);
+                this.buffer = merged;
+
+                while (this.buffer.length >= 2) {
+                    let len = 0, mult = 1, i = 1, digit;
+                    do {
+                        if (i >= this.buffer.length) return;
+                        digit = this.buffer[i++];
+                        len += (digit & 127) * mult;
+                        mult *= 128;
+                    } while (digit & 128);
+                    if (this.buffer.length < i + len) return;
+                    this.handle(this.buffer[0], this.buffer.subarray(i, i + len));
+                    this.buffer = this.buffer.slice(i + len);
+                }
+            }
+
+            handle(header, body) {
+                const type = header >> 4;
+                if (type === 2) { // CONNACK
+                    if (body[1] !== 0) { this.ws.close(); return; }
+                    this.ready = true;
+                    this.retry = 1000;
+                    this.subs.forEach(topic => this.sendSubscribe(topic));
+                    clearInterval(this.pingTimer);
+                    this.pingTimer = setInterval(() => this.send(Uint8Array.of(0xC0, 0)), MQTT_KEEPALIVE * 800);
+                    this.onChange();
+                } else if (type === 3) { // PUBLISH
+                    const qos = (header >> 1) & 3;
+                    const topicLen = (body[0] << 8) | body[1];
+                    const topic = dec.decode(body.subarray(2, 2 + topicLen));
+                    const start = 2 + topicLen + (qos ? 2 : 0);
+                    this.onMessage(topic, dec.decode(body.subarray(start)));
+                }
+            }
+
+            send(bytes) {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(bytes);
+            }
+
+            sendSubscribe(topic) {
+                this.packetId = (this.packetId % 65535) + 1;
+                this.send(mqttPacket(0x82, [this.packetId >> 8, this.packetId & 255, ...mqttString(topic), 0]));
+            }
+
+            subscribe(topic) {
+                this.subs.add(topic);
+                if (this.ready) this.sendSubscribe(topic);
+            }
+
+            publish(topic, text) {
+                if (!this.ready) return false;
+                this.send(mqttPacket(0x30, [...mqttString(topic), ...enc.encode(text)]));
+                return true;
+            }
+        }
+
+        // ---------- Canale firmato TV <-> telefono ----------
+        // La chiave viaggia solo nel QR, dopo il "#": non arriva mai ai broker.
+        const link = { role: null, key: null, clients: [], inTopic: '', outTopic: '', seen: new Set(), onMessage: null };
+
+        async function startLink(role, pairId, keyBytes, onMessage, onChange) {
+            link.role = role;
+            link.onMessage = onMessage;
+            link.key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+            const base = `skukkatron/${pairId}`;
+            link.inTopic = `${base}/${role === 'tv' ? 'rc' : 'tv'}`;
+            link.outTopic = `${base}/${role}`;
+            link.clients = BROKERS.map(url => new MiniMqtt(url, onLinkMessage, onChange));
+            link.clients.forEach(c => c.subscribe(link.inTopic));
+        }
+
+        const linkReady = () => link.clients.some(c => c.ready);
+
+        async function sendLink(payload) {
+            if (!link.key) return false;
+            const m = JSON.stringify({ ...payload, t: Date.now(), n: toHex(randomBytes(6)) });
+            const s = toB64u(await crypto.subtle.sign('HMAC', link.key, enc.encode(m)));
+            const wire = JSON.stringify({ m, s });
+            return link.clients.map(c => c.publish(link.outTopic, wire)).some(Boolean);
+        }
+
+        async function onLinkMessage(topic, text) {
+            if (topic !== link.inTopic) return;
+            try {
+                const { m, s } = JSON.parse(text);
+                if (!await crypto.subtle.verify('HMAC', link.key, fromB64u(s), enc.encode(m))) return;
+                const msg = JSON.parse(m);
+                // Lo stesso messaggio arriva da entrambi i broker; i comandi vecchi si scartano
+                if (link.seen.has(msg.n)) return;
+                link.seen.add(msg.n);
+                if (link.seen.size > 300) link.seen.delete(link.seen.values().next().value);
+                if (link.role === 'tv' && Math.abs(Date.now() - msg.t) > CMD_MAX_AGE) return;
+                link.onMessage(msg);
+            } catch (err) {
+                // messaggio non nostro o malformato
+            }
+        }
+
+        // Riaprendo la scheda (es. telefono sbloccato) la riconnessione è immediata
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') link.clients.forEach(c => c.connect());
+        });
+
+        // ---------- Lato TV ----------
+        const REMOTE_COMMANDS = {
+            chup: () => changeChannel(1),
+            chdn: () => changeChannel(-1),
+            volup: () => adjustVolume(0.1),
+            voldn: () => adjustVolume(-0.1),
+            mute: toggleMute,
+            full: toggleFullscreen,
+            list: goToChannels,
+            epg: goToGuide,
+            del: clearNum,
+            ok: tuneChannel,
+            info: () => togglePanel(),
+            power: powerToggle,
+            quality: cycleQuality
+        };
+
+        let phoneSeen = false;
+
+        function publishState() {
+            if (link.role !== 'tv') return;
+            const channel = channels[currentIndex];
+            sendLink({
+                s: {
+                    on: hero.classList.contains('on'),
+                    lcn: channel ? channel.lcn : null,
+                    name: channel ? channel.name : ''
+                }
+            });
+        }
+
+        function onTvMessage(msg) {
+            const k = msg.k;
+            if (k === 'hello') {
+                if (!phoneSeen) flashNum('TEL OK');
+                phoneSeen = true;
+                document.getElementById('pairStatus').textContent = '✓ Telefono collegato';
+                publishState();
+                return;
+            }
+            if (/^[0-9]$/.test(k)) pressNum(k);
+            else if (REMOTE_COMMANDS[k]) REMOTE_COMMANDS[k]();
+            else return;
+            pressVisual(k);
+            if (k === 'power' || k === 'ok') setTimeout(publishState, 300);
+        }
+
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const el = document.createElement('script');
+                el.src = src;
+                el.onload = resolve;
+                el.onerror = reject;
+                document.head.appendChild(el);
+            });
+        }
+
+        function readPairing() {
+            try {
+                const saved = JSON.parse(sessionStorage.getItem('skt-pair'));
+                if (saved && saved.id && saved.key) return saved;
+            } catch (err) { /* storage non disponibile */ }
+            const pair = { id: toHex(randomBytes(16)), key: toB64u(randomBytes(32)) };
+            try { sessionStorage.setItem('skt-pair', JSON.stringify(pair)); } catch (err) { /* pazienza */ }
+            return pair;
+        }
+
+        async function startTvLink() {
+            const pair = readPairing();
+            const url = `${location.href.split(/[?#]/)[0]}?remote=${pair.id}#${pair.key}`;
+            startLink('tv', pair.id, fromB64u(pair.key), onTvMessage, () => {
+                if (!phoneSeen) {
+                    document.getElementById('pairStatus').textContent = linkReady() ? 'In attesa del telefono…' : 'Collegamento ai server pubblici…';
+                }
+            });
+
+            try {
+                await loadScript(QR_LIB);
+                const qr = qrcode(0, 'L');
+                qr.addData(url);
+                qr.make();
+                const svg = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+                document.getElementById('pairQr').innerHTML = svg;
+                document.getElementById('pairQrOff').innerHTML = svg;
+                document.getElementById('pairHintOff').classList.remove('hidden');
+            } catch (err) {
+                document.getElementById('pairStatus').textContent = 'Impossibile generare il QR code';
+            }
+        }
+
+        function togglePairing() {
+            tvPanel.classList.toggle('pairing');
+        }
+
+        // ---------- Lato telefono (?remote=ID#chiave) ----------
+        function startPhoneRemote(pairId, keyText) {
+            document.body.classList.add('remote-mode');
+            document.title = 'SkukkatronTV · Telecomando';
+            const statusEl = document.getElementById('rcStatus');
+            let tvState = null;
+            let tvTimer = null;
+
+            const render = () => {
+                if (!linkReady()) statusEl.textContent = 'Collegamento…';
+                else if (!tvState) statusEl.textContent = 'Collegato · in attesa della TV…';
+                else if (!tvState.on) statusEl.textContent = '● TV collegata · spenta';
+                else statusEl.textContent = `● ${tvState.lcn} · ${tvState.name}`;
+            };
+
+            let keyBytes;
+            try {
+                keyBytes = fromB64u(keyText);
+                if (keyBytes.length !== 32 || !/^[0-9a-f]{32}$/.test(pairId)) throw new Error('codice');
+            } catch (err) {
+                statusEl.textContent = 'Codice non valido: inquadra di nuovo il QR sulla TV';
+                return;
+            }
+
+            const hello = () => {
+                sendLink({ k: 'hello' });
+                clearTimeout(tvTimer);
+                tvTimer = setTimeout(() => {
+                    if (!tvState) statusEl.textContent = 'TV non raggiungibile: è aperta con questo QR?';
+                }, 6000);
+            };
+
+            let wasReady = false;
+            startLink('rc', pairId, keyBytes, (msg) => {
+                if (!msg.s) return;
+                tvState = msg.s;
+                clearTimeout(tvTimer);
+                render();
+            }, () => {
+                const ready = linkReady();
+                if (ready && !wasReady) hello();
+                wasReady = ready;
+                render();
+            });
+
+            remoteEl.querySelectorAll('.rbtn').forEach((btn) => {
+                btn.onclick = async () => {
+                    navigator.vibrate?.(12);
+                    if (!await sendLink({ k: btn.dataset.k })) statusEl.textContent = 'Non collegato: riprovo…';
+                };
+            });
+        }
+
+        const remoteParam = new URLSearchParams(location.search).get('remote');
+        if (remoteParam) startPhoneRemote(remoteParam, location.hash.slice(1));
+        else startTvLink();
     </script>
 </body>
 </html>
